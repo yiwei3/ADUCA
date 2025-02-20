@@ -13,7 +13,7 @@ def coder(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=Non
     d = problem.operator_func.d
     n = problem.operator_func.n
     L = parameters["L"]
-    gamma = parameters["gamma"]
+    mu = parameters["mu"]
     block_size = parameters['block_size']
     blocks_1 = construct_block_range(begin=0, end=d, block_size=block_size)
     block_size_2 = parameters['block_size_2']
@@ -58,7 +58,7 @@ def coder(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=Non
         # Update steps
         A_prev = A
         a_prev = a
-        a = (1 + gamma * A_prev) / (2 * L)
+        a = (1 + mu * A_prev) / (2 * L)
         A = A_prev + a
 
         F_x_prev = np.copy(F_store)
@@ -124,7 +124,7 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
     # Initialize parameters and variables
     d = problem.operator_func.d
     n = problem.operator_func.n
-    gamma = parameters["gamma"]
+    mu = parameters["mu"]
     block_size = parameters['block_size']
     blocks_1 = construct_block_range(begin=0, end=d, block_size=block_size)
     block_size_2 = parameters['block_size_2']
@@ -136,8 +136,8 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
     logging.info(f"m_1 = {m_1}")
     logging.info(f"m_2 = {m_2}")
     logging.info(f"m = {m}")
-    L = 0.5
-    L_ = 0.5
+    L = 0.01
+    L_ = 0.01
     a, A = 0, 0
 
     x0 = np.zeros(problem.d) if x0 is None else x0
@@ -182,7 +182,7 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
             temp_F_store = np.copy(F_store)
 
             # Step 8
-            a = (1 + gamma * A_prev) / (2 * L)
+            a = (1 + mu * A_prev) / (2 * L)
             A = A_prev + a
 
             # Step 9
@@ -216,6 +216,7 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
 
         # Logging and exit condition
         if iteration % (m * exitcriterion.loggingfreq) == 0:
+            print(f"!!! L: {L}")
             x_tilde = x_tilde_sum / A
             elapsed_time = time.time() - starttime
             opt_measure = problem.func_value(x_tilde)

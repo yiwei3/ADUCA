@@ -8,8 +8,6 @@ class SVMElasticGFunc:
         self.n = n
 
     def func_value(self, x):
-        assert len(x) == self.d + self.n
-
         ret_1 = np.sum(np.abs(x[:self.d]))  # L1 regularization part
         # print(f"!!! np.sum(x[:self.d]): {np.sum(x[:self.d])} ")
         ret_2 = np.sum(x[:self.d] ** 2)     # L2 regularization part
@@ -18,12 +16,9 @@ class SVMElasticGFunc:
         # Constraint check for elements of x[d+1:] to be in [-1, 0]
         # if not np.all((-1.0 <= x[self.d:]) & (x[self.d:] <= 0.0)):
         #     return -np.inf
-
         return ret
 
     def prox_opr_coordinate(self, j, u, tau):
-        assert 1 <= j <= self.n + self.d
-
         if j <= self.d:
             p1 = tau * self.lambda1
             p2 = 1.0 / (1.0 + tau * self.lambda2)

@@ -93,7 +93,7 @@ def gr(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, x_0=None
         iteration += m
         if iteration % ( m *  exit_criterion.loggingfreq) == 0:
             elapsed_time = time.time() - start_time
-            opt_measure = problem.func_value(x_hat)
+            opt_measure = problem.func_value(x)
             logging.info(f"elapsed_time: {elapsed_time}, iteration: {iteration}, opt_measure: {opt_measure}")
             logresult(results, iteration, elapsed_time, opt_measure, L=L)
             exit_flag = CheckExitCondition(exit_criterion, iteration, elapsed_time, opt_measure)

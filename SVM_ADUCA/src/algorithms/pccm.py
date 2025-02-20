@@ -14,7 +14,7 @@ def pccm(problem, exitcriterion, parameters, x0=None):
     d = problem.operator_func.d
     n = problem.operator_func.n
     L = parameters["L"]
-    gamma = parameters["gamma"]
+    mu = parameters["mu"]
     block_size = parameters['block_size']
     blocks_1 = construct_block_range(begin=0, end=d, block_size=block_size)
     block_size_2 = parameters['block_size_2']
@@ -56,7 +56,7 @@ def pccm(problem, exitcriterion, parameters, x0=None):
         # Update steps
         A_prev = A
         a_prev = a
-        a = (1 + gamma * A_prev) / (2 * L)
+        a = (1 + mu * A_prev) / (2 * L)
         A = A_prev + a
 
         F_x_prev = np.copy(F_store)

@@ -160,7 +160,7 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
         # Stepsize option 2
         u_diff = np.copy(u - u_)
         F_diff = np.copy(F-F_)
-        L_k = np.sqrt(np.inner(F_diff, (normalizer * F_diff)) / (np.inner(u_diff, (normalizer_recip * u_diff)) + eps))
+        L_k = np.sqrt(np.inner(F_diff, (normalizer * F_diff)) / (np.inner(u_diff, (normalizer_recip * u_diff))))
         if L_k == 0:
             step_2 = np.inf
         else:
@@ -168,7 +168,7 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
 
         # Stepsize option 3
         F_tilde_diff = np.copy(F-F_tilde)
-        L_hat_k = np.sqrt(np.inner(F_tilde_diff, (normalizer * F_tilde_diff)) / (np.inner(u_diff, (normalizer_recip * u_diff)) + eps))
+        L_hat_k = np.sqrt(np.inner(F_tilde_diff, (normalizer * F_tilde_diff)) / (np.inner(u_diff, (normalizer_recip * u_diff))))
         if L_hat_k == 0:
             step_3 = np.inf
         else:    
@@ -270,10 +270,10 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
         
         if k % (m *  exit_criterion.loggingfreq) == 0:
             # Compute averaged variables
-            # step = aduca_stepsize(u,u_,a,a_,F,F_,F_tilde)
+            # step, L, L_hat = aduca_stepsize(normalizers, normalizers_recip, u, u_, a, a_, F, F_, F_tilde)
             # a_ = a
             # a = step
-            # A += a      
+            # A += a
             # u_hat = ((A - a) * u_hat / A) + (a*u / A)
             elapsed_time = time.time() - start_time
             opt_measure = problem.func_value(u)

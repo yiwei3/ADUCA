@@ -94,14 +94,14 @@ def main():
     exitcriterion = ExitCriterion(maxiter, maxtime, targetaccuracy, loggingfreq)
 
     # Runing
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     logging.info(f"timestamp = {timestamp}")
     logging.info("Completed initialization")
     traj_dir = os.path.join(outputdir, "traj")
     os.makedirs(traj_dir, exist_ok=True)
     outputfilename = os.path.join(
         traj_dir,
-        f"{dataset}-beta-{args.beta}-block-{args.block_size}-{lambda1}_{lambda2}-{algorithm}-{args.lipschitz}-output-{timestamp}.json",
+        f"{dataset}-beta-{args.beta}-{algorithm}-blocksize-{args.block_size}-{args.block_size_2}-time-{timestamp}.json",
     )
     logging.info(f"outputfilename = {outputfilename}")
     logging.info("--------------------------------------------------")

@@ -83,7 +83,7 @@ def pccm(problem, exitcriterion, parameters, x0=None):
         if iteration % (m * exitcriterion.loggingfreq) == 0:
             x_tilde = x_tilde_sum / A
             elapsed_time = time.time() - starttime
-            opt_measure = problem.func_value(x_tilde)
+            opt_measure = problem.func_value(x)
             print(f"Elapsed time: {elapsed_time}, Iteration: {iteration}, Opt measure: {opt_measure}")
             logresult(results, iteration, elapsed_time, opt_measure)
             exitflag = CheckExitCondition(exitcriterion, iteration, elapsed_time, opt_measure)

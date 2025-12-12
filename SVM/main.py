@@ -5,12 +5,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Datasets to run (files must exist in ./data)
 datasets = [
-    'a9a',
+    # 'a9a',
     # 'gisette_scale.bz2',
     'w8a',
-    'real-sim',
-    'epsilon_normalized.t.bz2',
-    'rcv1_train.binary.bz2',
+    # 'real-sim',
+    # 'epsilon_normalized.t.bz2',
+    # 'rcv1_train.binary.bz2',
 ]
 
 algorithms = [
@@ -32,27 +32,29 @@ for d in (traj_dir, log_dir, plot_dir):
 # Base parameters shared by all runs (overridable per dataset)
 base_params = {
     'outputdir': str(output_root),
-    'maxiter': 1_000_000,
+    'maxiter': 3_000_000,
     'maxtime': 500_000,
     'targetaccuracy': 1e-12,
-    'lipschitz': 1.0,
     'lambda1': 1e-4,
     'lambda2': 1e-4,
     'mu': 0.0,
     'beta': 
-    0.95, 
+    # 0.9,
+    # 0.95, 
     # 0.8,
-    # 0.7,
+    0.7,
     'gamma': 
-    0.43,
+    # 0.3,
+    # 0.43,
     # 0.2,
-    # 0.1,
+    0.1,
     'rho': 
-    1.05,
+    # 1.1,
+    # 1.05,
     # 1.2,
-    # 1.3,
+    1.3,
     'block_size': 64,
-    'block_size_2': 64,
+    'block_size_2': 512,
 }
 
 # Per-dataset overrides (edit as needed)
@@ -76,19 +78,19 @@ dataset_params = {
         # 0.00005
     },
     'real-sim': {
-        'maxiter': 1_000_000, 
+        'maxiter': 3_000_000, 
         'lipschitz': 
         0.004, 
         # 0.000002
     },
-    'epsilon_normalized.bz2': {
-        'maxiter': 1_000_000, 
+    'epsilon_normalized.t.bz2': {
+        'maxiter': 3_000_000, 
         'lipschitz': 
         0.003, 
         # 0.000004
     },
     'rcv1_train.binary.bz2': {
-        'maxiter': 1_000_000, 
+        'maxiter': 3_000_000, 
         'lipschitz':
         0.007, 
         # 0.000001

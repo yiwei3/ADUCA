@@ -17,7 +17,6 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
     beta = parameters["beta"]
     gamma = parameters["gamma"]
     rho = parameters["rho"]
-    eps = parameters.get("eps", 1e-8)
 
     rho_0 = min(rho, beta * (1 + beta) * (1 - gamma))
     eta = ((gamma * (1 + beta)) / (1 + beta**2)) ** 0.5
@@ -38,6 +37,9 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
 
     normalizers = np.power(np.copy(1 / op_L), np.copy(1 / problem.operator_func.beta)) * 1 / beta
     normalizers_recip = np.where(normalizers != 0, 1 / normalizers, 0)
+
+    # normalizers = np.ones(n)
+    # normalizers_recip = np.ones(n)
 
     time_end_initialization = time.time()
     logging.info(f"Initialization time = {time_end_initialization - time_start_initialization:.4f} seconds")
@@ -83,6 +85,10 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
         u_diff = np.copy(u - u_)
         F_diff = np.copy(F-F_)
         L_k = np.sqrt(np.inner(F_diff, (normalizer * F_diff)) / (np.inner(u_diff, (normalizer_recip * u_diff))))
+        # den = max(np.inner(u_diff, normalizer_recip * u_diff), 1e-24)
+        # num = max(np.inner(F_diff, normalizer * F_diff), 1e-24)
+        # L_k = np.sqrt(num / den)
+
         if L_k == 0:
             step_2 = np.inf
         else:
@@ -98,7 +104,6 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
 
         # Stepsize selection
         step = min(step_1, step_2, step_3)
-        # logging.info(f"selected stepsize: {step}")
         return step, L_k , L_hat_k
     ###
 
@@ -218,7 +223,10 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
             dp = problem.operator_func.dp(Q)
             problem.operator_func.func_map_block_update(F_store, u, p, p_, dp, dp_, block)
             
-
+        # if k % (m * 50) == 0:
+        #     F_store = problem.operator_func.func_map(u)        # fresh F(u)
+        #     F_tilde = np.copy(F_store)
+            
         np.copyto(F_, F)
         F = np.copy(F_store)
         np.copyto(v_, v)
@@ -236,7 +244,7 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
             # A += a
             # u_hat = ((A - a) * u_hat / A) + (a*u / A)
             elapsed_time = time.time() - start_time
-            opt_measure = problem.residual(v)
+            opt_measure = problem.residual(u)
             logging.info(f"elapsed_time: {elapsed_time}, iteration: {k}, opt_measure: {opt_measure}")
             logresult(results, k, elapsed_time, opt_measure, L=L, L_hat=L_hat)
             exit_flag = CheckExitCondition(exit_criterion, k, elapsed_time, opt_measure)

@@ -5,7 +5,7 @@ import shlex
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Scenarios and algorithms to run
-scenarios = [4,6,7]
+scenarios = [1,2,3]
 
 algorithms = [
               "PCCM", 
@@ -22,14 +22,18 @@ log_dir = output_root / "log"
 plot_dir = output_root / "plot"
 for d in (traj_dir, log_dir, plot_dir):
     d.mkdir(parents=True, exist_ok=True)
+# Timestamped subfolder for this run
+output_run_stamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+output_run_dir = traj_dir / output_run_stamp
+output_run_dir.mkdir(parents=True, exist_ok=True)
 
 # Base parameters (mirror those used in existing trajectory files)
 base_params = {
-    "maxiter": 1_000_000,
+    "maxiter": 2_000_000,
     "maxtime": 500_000,
     "targetaccuracy": 1e-14,
     "optval": 0.0,
-    # "loggingfreq": 100,
+    "loggingfreq": 20,
     "mu": 0.0,
     "block_size": 64,
 }
@@ -45,9 +49,9 @@ base_params = {
 #     },
 # },
 scenario_params = {
-    1: {"lipschitz": 15, },
-    2: {"lipschitz": 20, },
-    3: {"lipschitz": 1, },
+    1: {"lipschitz": 100, },
+    2: {"lipschitz": 100, },
+    3: {"lipschitz": 500, },
     4: {"lipschitz": 20, },
     5: {"lipschitz": 20, },
     6: {"lipschitz": 20, },
@@ -56,14 +60,11 @@ scenario_params = {
     9: {"lipschitz": 20, },
 }
 
-algorithm_params = {
-    "GR": {"beta": 0.7},
-    # "CODER": {"lipschitz": 50},
-    # "PCCM": {"lipschitz": 10},
-}
-
 # Parameter sweeps for each algorithm (overrides applied on top of base + scenario settings)
 algorithm_param_sets = {
+    "GR": [
+        {"beta": 0.7},
+    ],
     "ADUCA": [
             {"beta": 0.7, "gamma": 0.1, "rho": 1.3},
             {"beta": 0.8, "gamma": 0.2, "rho": 1.2},
@@ -80,7 +81,6 @@ def run_task(scenario: int, algo: str, variant_idx=None, variant_overrides=None)
 
     # Merge overrides (scenario -> algo-specific)
     params.update({k: v for k, v in scenario_cfg.items() if k != "algorithms"})
-    params.update(algorithm_params.get(algo, {}))
     params.update(algo_overrides)
     if variant_overrides:
         params.update(variant_overrides)
@@ -90,9 +90,10 @@ def run_task(scenario: int, algo: str, variant_idx=None, variant_overrides=None)
     beta = params.get("beta")
     if beta is None:
         beta = 'None'
+    ### Name of the output trajectory file 
     params["outputdir"] = str(
-        traj_dir
-        / f"scenario-{scenario}-{algo}_{variant_suffix}-beta-{beta}-blocksize-{params['block_size']}-time-{time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime())}.json"
+        output_run_dir
+        / f"scenario-{scenario}-{algo}{variant_suffix}-beta-{beta}-blocksize-{params['block_size']}-time-{output_run_stamp}.json"
     )
 
     cmd = ["python", "run_algos.py", "--scenario", str(scenario), "--algo", algo]

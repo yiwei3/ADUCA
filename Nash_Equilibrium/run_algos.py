@@ -43,6 +43,7 @@ def parse_commandline():
     parser.add_argument('--gamma', type = float, help='aduca constant parameter')
     parser.add_argument('--rho', type = float, default=0.0, help='aduca constant parameter')
     parser.add_argument('--block_size', type = int, default=1, help='block_size parameter >= 1, <= n')
+    parser.add_argument('--seed', type=int, default=None, help='Random seed (default: random)')
 
     return parser.parse_args()
 
@@ -76,53 +77,57 @@ def main():
     logging.info("--------------------------------------------------")
 
     # Problem instance instantiation
-    np.random.seed(40)
-    c = np.random.uniform(1,100,n)
-    # L = np.random.uniform(0.5,30,n)
+    rng = np.random.default_rng(args.seed)
+    if args.seed is not None:
+        logging.info(f"Random seed: {args.seed}")
+    else:
+        logging.info("Random seed: OS entropy")
+    c = rng.uniform(1, 100, n)
+    # L = rng.uniform(0.5,30,n)
     if scenario == 1:
          gamma = 1.1
-         beta = np.random.uniform(0.5, 2,n)
-         L = np.random.uniform(0.5,5,n)
+         beta = rng.uniform(0.5, 2, n)
+         L = rng.uniform(0.5, 5, n)
 
     if scenario == 2:
          gamma = 1.1
-         beta = np.random.uniform(0.5, 8,n)
-         L = np.random.uniform(0.5,5,n)
+         beta = rng.uniform(0.5, 2, n)
+         L = rng.uniform(0.5, 20, n)
     
     if scenario == 3:
          gamma = 1.1
-         beta = np.random.uniform(0.5, 2,n)
-         L = np.random.uniform(0.5,20,n)
+         beta = rng.uniform(0.5, 2, n)
+         L = rng.uniform(0.5, 50, n)
 
     if scenario == 4:
         gamma = 1.5
-        beta = np.random.uniform(0.3, 4,n)
-        L = np.random.uniform(0.5,5,n)
+        beta = rng.uniform(0.3, 4, n)
+        L = rng.uniform(0.5, 5, n)
          
     if scenario == 5:
         gamma = 1.5
-        beta = np.random.uniform(0.3, 10,n)
-        L = np.random.uniform(0.5,5,n)
+        beta = rng.uniform(0.3, 10, n)
+        L = rng.uniform(0.5, 5, n)
 
     if scenario == 6:
         gamma = 1.5
-        beta = np.random.uniform(0.3, 4, n)
-        L = np.random.uniform(0.5,20,n)
+        beta = rng.uniform(0.3, 4, n)
+        L = rng.uniform(0.5, 20, n)
 
     if scenario == 7:
         gamma = 1.3
-        beta = np.random.uniform(0.3, 4, n)
-        L = np.random.uniform(0.5,5,n)
+        beta = rng.uniform(0.3, 4, n)
+        L = rng.uniform(0.5, 5, n)
     
     if scenario == 8:
         gamma = 1.3
-        beta = np.random.uniform(0.3, 10, n)
-        L = np.random.uniform(0.5,5,n)
+        beta = rng.uniform(0.3, 10, n)
+        L = rng.uniform(0.5, 5, n)
 
     if scenario == 9:
         gamma = 1.3
-        beta = np.random.uniform(0.3, 4, n)
-        L = np.random.uniform(0.5,20,n)
+        beta = rng.uniform(0.3, 4, n)
+        L = rng.uniform(0.5, 20, n)
 
     F = NASHOprFunc(n, gamma, beta, c, L)
     g = NASHGFunc(n)

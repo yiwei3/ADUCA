@@ -6,8 +6,6 @@ from src.problems.GMVI_func import GMVIProblem
 from src.algorithms.utils.results import Results, logresult
 from src.algorithms.utils.helper import construct_block_range
 
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-
 """ 
 Aduca rescaled for SVM. Use simple stepsize rule (3.9) in the paper (without mu > 0 case).
 """
@@ -180,12 +178,26 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
     ###
 
 
-    #line-search for the first step
-    alpha = 2**0.5
-    i = -1
-    # First Loop
+    # line-search for the first step
+    alpha = 2
+    i = 0
+    a_0 = 1
+
+    u_1 = problem.g_func.prox_opr(u_0 - a_0 * normalizers * F_0, a_0 * normalizers[:d], d)
+    for block in blocks:
+        F_tilde_1[block] = F_store[block]
+        F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
+    F_1 = np.copy(F_store)
+    norm_F = np.linalg.norm((F_1 - F_0))
+    norm_F_tilde = np.linalg.norm((F_1 - F_tilde_1))
+    norm_u = np.linalg.norm((u_1 - u_0))
+
+    L_1 = norm_F / norm_u
+    L_hat_1 = norm_F_tilde / norm_u
+
+    a_0 = min(C/L_1, C_hat/L_hat_1)
+
     while True:
-        i += 1
         F_store = np.copy(F_0)
         a_0 = alpha**(-i)
 
@@ -199,24 +211,10 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
         norm_F = np.linalg.norm((F_1 - F_0))
         norm_F_tilde = np.linalg.norm((F_1 - F_tilde_1))
         norm_u = np.linalg.norm((u_1 - u_0))
-        if (a_0 * norm_F_tilde <= C_hat * norm_u) and (a_0 * norm_F <= C * norm_u):
+        if (2**0.5 * a_0 * norm_F <= norm_u):
             break
-    # Second Loop
-    while True:
-        if (a_0 * norm_F_tilde >= C_hat / alpha * norm_u) or (a_0 * norm_F >= C / alpha * norm_u):
-            break
-        else:
-            a_0 = a_0 * alpha
-            u_1 = problem.g_func.prox_opr(u_0 - a_0 * normalizers * F_0, a_0 * normalizers[:d], d)
-
-            for block in blocks:
-                F_tilde_1[block] = F_store[block]
-                F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
-            
-            F_1 = np.copy(F_store)
-            norm_F = np.linalg.norm((F_1 - F_0))
-            norm_F_tilde = np.linalg.norm((F_1 - F_tilde_1))
-            norm_u = np.linalg.norm((u_1 - u_0))
+        i += 1
+    # line-search end
 
     a_ = a_0
     a = a_0

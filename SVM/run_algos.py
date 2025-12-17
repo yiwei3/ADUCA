@@ -12,12 +12,17 @@ import os
 from src.algorithms.utils.exitcriterion import ExitCriterion, CheckExitCondition
 from src.problems.GMVI_func import GMVIProblem
 from src.algorithms.utils.results import Results, logresult
-from src.algorithms.coder import coder, coder_linesearch
+from src.algorithms.coder import (
+    coder,
+    coder_linesearch,
+    coder_normalized,
+    coder_linesearch_normalized,
+)
 from src.algorithms.codervr import codervr, CODERVRParams
-from src.algorithms.pccm import pccm
+from src.algorithms.pccm import pccm, pccm_normalized
 from src.algorithms.prcm import prcm
 from src.algorithms.rapd import rapd
-from src.algorithms.gr import gr
+from src.algorithms.gr import gr, gr_normalized
 from src.algorithms.aduca import aduca
 from src.problems.utils.data_parsers import libsvm_parser
 from src.problems.utils.data import Data
@@ -71,6 +76,7 @@ def main():
     # Run setup
     args = parse_commandline()
     outputdir = args.outputdir
+    os.makedirs(outputdir, exist_ok=True)
     algorithm = args.algo
     # Problem Setup
     dataset = args.dataset
@@ -97,10 +103,8 @@ def main():
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     logging.info(f"timestamp = {timestamp}")
     logging.info("Completed initialization")
-    traj_dir = os.path.join(outputdir, "traj")
-    os.makedirs(traj_dir, exist_ok=True)
     outputfilename = os.path.join(
-        traj_dir,
+        outputdir,
         f"{dataset}-beta-{args.beta}-{algorithm}-blocksize-{args.block_size}-{args.block_size_2}-time-{timestamp}.json",
     )
     logging.info(f"outputfilename = {outputfilename}")
@@ -121,6 +125,15 @@ def main():
         coder_params = {"L": L, "mu": mu, "block_size": block_size, "block_size_2": block_size_2}
         output, output_x = coder(problem, exitcriterion, coder_params)
 
+    elif algorithm == "CODER_normalized":
+        logging.info("Running CODER_normalized...")
+        L = args.lipschitz
+        mu = args.mu
+        block_size = args.block_size
+        block_size_2 = args.block_size_2
+        coder_params = {"L": L, "mu": mu, "block_size": block_size, "block_size_2": block_size_2}
+        output, output_x = coder_normalized(problem, exitcriterion, coder_params)
+
     elif algorithm == "CODER_linesearch":
         logging.info("Running CODER_linesearch...")
         mu = args.mu
@@ -128,6 +141,14 @@ def main():
         block_size_2 = args.block_size_2
         coder_params = {"mu": mu, "block_size": block_size, "block_size_2": block_size_2}
         output, output_x = coder_linesearch(problem, exitcriterion, coder_params)
+
+    elif algorithm == "CODER_linesearch_normalized":
+        logging.info("Running CODER_linesearch_normalized...")
+        mu = args.mu
+        block_size = args.block_size
+        block_size_2 = args.block_size_2
+        coder_params = {"mu": mu, "block_size": block_size, "block_size_2": block_size_2}
+        output, output_x = coder_linesearch_normalized(problem, exitcriterion, coder_params)
 
     elif algorithm == "PCCM":
         logging.info("Running PCCM...")
@@ -137,6 +158,15 @@ def main():
         block_size_2 = args.block_size_2
         pccm_params = {"L": L, "mu": mu, "block_size": block_size, "block_size_2": block_size_2}
         output, output_x = pccm(problem, exitcriterion, pccm_params)
+
+    elif algorithm == "PCCM_normalized":
+        logging.info("Running PCCM_normalized...")
+        L = args.lipschitz
+        mu = args.mu
+        block_size = args.block_size
+        block_size_2 = args.block_size_2
+        pccm_params = {"L": L, "mu": mu, "block_size": block_size, "block_size_2": block_size_2}
+        output, output_x = pccm_normalized(problem, exitcriterion, pccm_params)
 
     elif algorithm == "PRCM":
         logging.info("Running PRCM...")
@@ -154,6 +184,14 @@ def main():
         logging.info("Running Golden Ratio...")
         param = {"beta": beta, "block_size": block_size, "block_size_2": block_size_2}
         output, output_x = gr(problem, exitcriterion, param)
+
+    elif algorithm == "GR_normalized":
+        beta = args.beta
+        block_size = args.block_size
+        block_size_2 = args.block_size_2
+        logging.info("Running Golden Ratio (normalized)...")
+        param = {"beta": beta, "block_size": block_size, "block_size_2": block_size_2}
+        output, output_x = gr_normalized(problem, exitcriterion, param)
 
     elif algorithm == "ADUCA":
         beta = args.beta

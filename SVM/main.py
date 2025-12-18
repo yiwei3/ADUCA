@@ -8,12 +8,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Datasets to run (files must exist in ./data)
 datasets = [
-    # 'a9a',
-    # 'gisette_scale.bz2',
-    # 'w8a',
-    # 'real-sim',
+    'a9a',
+    'gisette_scale.bz2',
+    'w8a',
+    'real-sim',
     'epsilon_normalized.t.bz2',
-    # 'rcv1_train.binary.bz2',
+    'rcv1_train.binary.bz2',
 ]
 
 DIST_ALGO_NAME = 'ADUCA_TORCH_DIST'
@@ -23,12 +23,12 @@ algorithms = [
     # 'CODER_linesearch',
     # 'CODER_normalized',
     # 'CODER_linesearch_normalized',
-    'PCCM_normalized',
-    'PCCM',
+    # 'PCCM_normalized',
+    # 'PCCM',
     # 'GR',
     # 'GR_normalized',
-    # 'ADUCA',
-    # DIST_ALGO_NAME,
+    # # 'ADUCA',
+    DIST_ALGO_NAME,
 ]
 
 # Output directories
@@ -64,11 +64,11 @@ dataset_params = {
         0.02, 
         # 0.0002, # CODER
     },
-    'gisette_scale': {
+    'gisette_scale.bz2': {
         'maxiter': 1_000_000, 
         'lipschitz': 
-        0.89, 
-        # 0.56, # CODER
+        # 0.89, 
+        0.56, # CODER
     },
     'w8a': {
         'maxiter': 3_000_000, 
@@ -89,7 +89,7 @@ dataset_params = {
         # 0.000004 # CODER
     },
     'rcv1_train.binary.bz2': {
-        'maxiter': 2_000_000, 
+        'maxiter': 3_000_000, 
         'lipschitz':
         0.007, 
         # 0.000001 # CODER
@@ -129,9 +129,9 @@ algorithm_param_sets = {
         {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1},
     ],
     DIST_ALGO_NAME: [
-        {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'gloo'},
-        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'gloo'},
-        {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'gloo'},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl'},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32'},
+        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl'},
     ],
 }
 
@@ -187,10 +187,18 @@ def run_task(ds: str, algo: str, variant_idx=None, variant_overrides=None):
     if variant_overrides:
         params.update(variant_overrides)
 
+    env = dict(os.environ)
+    env.setdefault("OMP_NUM_THREADS", "1")
+    env.setdefault("MKL_NUM_THREADS", "1")
+    env.setdefault("OPENBLAS_NUM_THREADS", "1")
+    env.setdefault("NUMEXPR_NUM_THREADS", "1")
+    env.setdefault("NCCL_DEBUG", "WARN")
+    env.setdefault("NCCL_IB_DISABLE", "1")
+
     if algo == DIST_ALGO_NAME:
         ### Distributed run with --nproc_per_node=j for using j GPUs
         master_port = _find_free_port()
-        cmd = ['torchrun', '--nproc_per_node=1', '--master-port', str(master_port), DIST_SCRIPT, '--dataset', ds]
+        cmd = ['torchrun', '--nproc_per_node=8', '--master-port', str(master_port), DIST_SCRIPT, '--dataset', ds]
         for key in DIST_PARAM_ORDER:
             if key not in params:
                 continue
@@ -210,11 +218,6 @@ def run_task(ds: str, algo: str, variant_idx=None, variant_overrides=None):
     print(f"Launching {ds} | {algo}{variant_suffix}:", ' '.join(shlex.quote(c) for c in cmd))
 
     # Limit per-process threading to avoid CPU oversubscription when running many tasks in parallel
-    env = dict(os.environ)
-    env.setdefault("OMP_NUM_THREADS", "8")
-    env.setdefault("MKL_NUM_THREADS", "8")
-    env.setdefault("OPENBLAS_NUM_THREADS", "8")
-    env.setdefault("NUMEXPR_NUM_THREADS", "8")
 
     with open(log_path, 'w') as logf:
         logf.write('Command: ' + ' '.join(cmd) + '\n\n')

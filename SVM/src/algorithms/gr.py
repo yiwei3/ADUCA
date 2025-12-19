@@ -191,6 +191,10 @@ def gr_normalized(problem: GMVIProblem, exit_criterion: ExitCriterion, parameter
     init_opt_measure = problem.func_value(x_0)
     logresult(results, 1, 0.0, init_opt_measure)
 
+    # Flattened normalizers for vectorized updates
+    normalizer_x = np.concatenate(normalizers_1) if normalizers_1 else np.array([], dtype=float)
+    normalizer_y = np.concatenate(normalizers_2) if normalizers_2 else np.array([], dtype=float)
+
     while not exit_flag:
         step, L = gr_stepsize(a, a_, x, x_, F, F_)
         a_ = a
@@ -204,20 +208,23 @@ def gr_normalized(problem: GMVIProblem, exit_criterion: ExitCriterion, parameter
         x_ = np.copy(x)
 
         F_prev = np.copy(F)
-        for idx, block in enumerate(blocks):
-            if idx < m_1:
-                norm_vec = normalizers_1[idx]
-                x[block] = problem.g_func.prox_opr_block(
-                    block, v[block] - a * norm_vec * F_prev[block], a * norm_vec
-                )
-            else:
-                norm_vec = normalizers_2[idx - m_1]
-                x[block] = problem.g_func.prox_opr_block(
-                    block, v[block] - a * norm_vec * F_prev[block], a
-                )
 
-            F = problem.operator_func.func_map_block_update(F, x[block], x_prev[block], block)
+        # Vectorized prox with preconditioning:
+        #   x-part: elastic-net prox with tau scaled by normalizer_x
+        #   y-part: hinge dual clamp with preconditioned gradient
+        z_x = v[:d] - a * normalizer_x * F_prev[:d]
+        tau_x = a * normalizer_x
+        p1 = tau_x * problem.g_func.lambda1
+        p2 = 1.0 / (1.0 + tau_x * problem.g_func.lambda2)
+        x_new_x = p2 * np.sign(z_x) * np.maximum(0, np.abs(z_x) - p1)
 
+        z_y = v[d:] - a * normalizer_y * F_prev[d:]
+        x_new_y = np.minimum(0, np.maximum(-1, z_y))
+
+        x = np.concatenate((x_new_x, x_new_y))
+
+        # Single block update to refresh F using the full delta
+        F = problem.operator_func.func_map_block_update(F, x, x_prev, slice(0, d + n))
         F_ = F_prev
 
         x_hat = (A - a) / A * x_hat + a / A * x
@@ -225,7 +232,7 @@ def gr_normalized(problem: GMVIProblem, exit_criterion: ExitCriterion, parameter
         iteration += m
         if iteration % (m * exit_criterion.loggingfreq) == 0:
             elapsed_time = time.time() - start_time
-            opt_measure = problem.func_value(x)
+            opt_measure = problem.func_value(x_hat)
             logging.info(f"elapsed_time: {elapsed_time}, iteration: {iteration}, opt_measure: {opt_measure}")
             logresult(results, iteration, elapsed_time, opt_measure, L=L)
             exit_flag = CheckExitCondition(exit_criterion, iteration, elapsed_time, opt_measure)

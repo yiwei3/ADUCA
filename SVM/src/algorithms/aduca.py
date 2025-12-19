@@ -188,9 +188,12 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
         F_tilde_1[block] = F_store[block]
         F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
     F_1 = np.copy(F_store)
-    norm_F = np.linalg.norm((F_1 - F_0))
-    norm_F_tilde = np.linalg.norm((F_1 - F_tilde_1))
-    norm_u = np.linalg.norm((u_1 - u_0))
+    F_diff = F_1 - F_0
+    F_tilde_diff = F_1 - F_tilde_1
+    u_diff = u_1 - u_0
+    norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
+    norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
+    norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
 
     L_1 = norm_F / norm_u
     L_hat_1 = norm_F_tilde / norm_u
@@ -208,9 +211,12 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
             F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
         
         F_1 = np.copy(F_store)
-        norm_F = np.linalg.norm((F_1 - F_0))
-        norm_F_tilde = np.linalg.norm((F_1 - F_tilde_1))
-        norm_u = np.linalg.norm((u_1 - u_0))
+        F_diff = F_1 - F_0
+        F_tilde_diff = F_1 - F_tilde_1
+        u_diff = u_1 - u_0
+        norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
+        norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
+        norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
         if (2**0.5 * a_0 * norm_F <= norm_u):
             break
         i += 1

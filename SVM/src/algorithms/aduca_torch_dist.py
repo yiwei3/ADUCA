@@ -19,7 +19,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 def _find_free_port(default: int = 29500) -> int:
     """Pick a free TCP port for single-process dist runs."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
+        s.bind(("", 0)) 
         return s.getsockname()[1] or default
 
 def _as_int_blocksize(value, default: int) -> int:
@@ -358,11 +358,19 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     i_ls = 0
     a0 = 1.0
 
-    def global_l2_norm_sq(x_part, y_part):
+    def global_weighted_F_norm_sq(x_part, y_part):
         # x_part is replicated: divide by world_size before reduction
-        x_sq = torch.sum((x_part ** 2).to(torch.float64)) / float(world_size)
-        y_sq = torch.sum((y_part ** 2).to(torch.float64))
-        local = x_sq + y_sq
+        num_x = torch.sum((normalizer_x * (x_part ** 2)).to(torch.float64))
+        num_y = torch.sum((normalizer_y * (y_part ** 2)).to(torch.float64))
+        local = num_x / float(world_size) + num_y
+        dist.all_reduce(local, op=dist.ReduceOp.SUM)
+        return local
+
+    def global_weighted_u_norm_sq(x_part, y_part):
+        # x_part is replicated: divide by world_size before reduction
+        den_x = torch.sum((normalizer_recip_x * (x_part ** 2)).to(torch.float64))
+        den_y = torch.sum((normalizer_recip_y * (y_part ** 2)).to(torch.float64))
+        local = den_x / float(world_size) + den_y
         dist.all_reduce(local, op=dist.ReduceOp.SUM)
         return local
 
@@ -378,9 +386,9 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     tilde_x1 = F_x0
     tilde_y1 = F_y1
 
-    norm_F_sq = global_l2_norm_sq(F_x1 - F_x0, F_y1 - F_y0)
-    norm_Ftilde_sq = global_l2_norm_sq(F_x1 - tilde_x1, F_y1 - tilde_y1)
-    norm_u_sq = global_l2_norm_sq(x1 - x0, y1 - y0)
+    norm_F_sq = global_weighted_F_norm_sq(F_x1 - F_x0, F_y1 - F_y0)
+    norm_Ftilde_sq = global_weighted_F_norm_sq(F_x1 - tilde_x1, F_y1 - tilde_y1)
+    norm_u_sq = global_weighted_u_norm_sq(x1 - x0, y1 - y0)
 
     norm_F = torch.sqrt(torch.clamp(norm_F_sq, min=0.0)).item()
     norm_Ftilde = torch.sqrt(torch.clamp(norm_Ftilde_sq, min=0.0)).item()
@@ -404,8 +412,8 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
         tilde_x1 = F_x0
         tilde_y1 = F_y1
 
-        norm_F_sq = global_l2_norm_sq(F_x1 - F_x0, F_y1 - F_y0)
-        norm_u_sq = global_l2_norm_sq(x1 - x0, y1 - y0)
+        norm_F_sq = global_weighted_F_norm_sq(F_x1 - F_x0, F_y1 - F_y0)
+        norm_u_sq = global_weighted_u_norm_sq(x1 - x0, y1 - y0)
 
         norm_F = torch.sqrt(torch.clamp(norm_F_sq, min=0.0)).item()
         norm_u = torch.sqrt(torch.clamp(norm_u_sq, min=0.0)).item()
@@ -748,9 +756,12 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
         F_tilde_1[block] = F_store[block]
         F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
     F_1 = np.copy(F_store)
-    norm_F = np.linalg.norm((F_1 - F_0))
-    norm_F_tilde = np.linalg.norm((F_1 - F_tilde_1))
-    norm_u = np.linalg.norm((u_1 - u_0))
+    F_diff = F_1 - F_0
+    F_tilde_diff = F_1 - F_tilde_1
+    u_diff = u_1 - u_0
+    norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
+    norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
+    norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
 
     L_1 = norm_F / norm_u
     L_hat_1 = norm_F_tilde / norm_u
@@ -768,9 +779,12 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
             F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
 
         F_1 = np.copy(F_store)
-        norm_F = np.linalg.norm((F_1 - F_0))
-        norm_F_tilde = np.linalg.norm((F_1 - F_tilde_1))
-        norm_u = np.linalg.norm((u_1 - u_0))
+        F_diff = F_1 - F_0
+        F_tilde_diff = F_1 - F_tilde_1
+        u_diff = u_1 - u_0
+        norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
+        norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
+        norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
         if (2 ** 0.5 * a_0 * norm_F <= norm_u):
             break
         i += 1

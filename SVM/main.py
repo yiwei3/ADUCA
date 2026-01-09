@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Datasets to run (files must exist in ./data)
 datasets = [
-    # 'a9a',
+    'a9a',
     'gisette_scale.bz2',
     # 'w8a',
     # 'real-sim',
@@ -31,6 +31,9 @@ algorithms = [
     DIST_ALGO_NAME,
 ]
 
+# Strong convexity toggle for ADUCA_TORCH_DIST
+strong_convexity = True
+
 # Output directories
 output_root = Path('./output')
 traj_dir = output_root / 'traj'
@@ -46,11 +49,11 @@ output_run_dir.mkdir(parents=True, exist_ok=True)
 # Base parameters shared by all runs (overridable per dataset)
 base_params = {
     'outputdir': str(output_run_dir),
-    'maxtime': 2_500,
+    'maxtime': 500_000,
     'targetaccuracy': 1e-12,
     'lambda1': 1e-4,
     'lambda2': 1e-4,
-    'mu': 0.0,
+    'mu': 1e-4,
     'block_size': 64,
     'block_size_2': 512,
     'loggingfreq': 10,
@@ -59,13 +62,13 @@ base_params = {
 # Per-dataset overrides (edit as needed)
 dataset_params = {
     'a9a': {
-        'maxiter': 3_000_000, 
+        'maxiter': 5_000_000, 
         'lipschitz': 
         # 0.014,
         0.0006, # preconditioned
     },
     'gisette_scale.bz2': {
-        'maxiter': 50_000_000, 
+        'maxiter': 5_000_000, 
         'lipschitz': 
         0.75,
         # 0.01, # preconditioned
@@ -83,7 +86,7 @@ dataset_params = {
         0.0002, # preconditioned
     },
     'epsilon_normalized.t.bz2': {
-        'maxiter': 200_000_000, 
+        'maxiter': 5_000_000, 
         'lipschitz': 
         0.002,
         # 0.0007, # preconditioned
@@ -112,7 +115,12 @@ algorithm_param_sets = {
     ],
     DIST_ALGO_NAME: [
         # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl'},
-        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32'},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 0,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-1,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-2,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-3,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-4,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-5,},
         # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl'},
     ],
 }
@@ -132,13 +140,14 @@ DIST_PARAM_ORDER = [
     'gamma',
     'rho',
     'mu',
+    'strong_convexity',
     'block_size',
     'block_size_2',
     'dist_backend',
     'dtype',
     'dense_threshold',
 ]
-DIST_BOOL_PARAMS = {'use_dense'}
+DIST_BOOL_PARAMS = {'use_dense', 'strong_convexity'}
 
 # Build all (dataset, algo, variant) tasks
 tasks = []
@@ -178,6 +187,8 @@ def run_task(ds: str, algo: str, variant_idx=None, variant_overrides=None):
     env.setdefault("NCCL_IB_DISABLE", "1")
 
     if algo == DIST_ALGO_NAME:
+        if strong_convexity:
+            params['strong_convexity'] = True
         ### Distributed run with --nproc_per_node=j for using j GPUs
         master_port = _find_free_port()
         cmd = ['torchrun', '--nproc_per_node=8', '--master-port', str(master_port), DIST_SCRIPT, '--dataset', ds]

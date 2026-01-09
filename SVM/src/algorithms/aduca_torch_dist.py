@@ -13,8 +13,6 @@ from src.problems.GMVI_func import GMVIProblem
 from src.algorithms.utils.results import Results, logresult
 from src.algorithms.utils.helper import construct_block_range
 
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-
 
 def _find_free_port(default: int = 29500) -> int:
     """Pick a free TCP port for single-process dist runs."""
@@ -138,7 +136,9 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     beta = float(parameters["beta"])
     gamma = float(parameters["gamma"])
     rho = float(parameters["rho"])
+    mu = float(parameters.get("mu", 0.0))
     eps = float(parameters.get("eps", 1e-12))
+    strong_convexity = bool(parameters.get("strong_convexity", parameters.get("strong-convexity", False)))
 
     lambda1 = float(getattr(problem.g_func, "lambda1", 0.0))
     lambda2 = float(getattr(problem.g_func, "lambda2", 0.0))
@@ -267,6 +267,9 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     col_norm = torch.sqrt(torch.clamp(col_sq_local, min=0.0)).to(dtype=vec_dtype)
     normalizer_x = torch.where(col_norm != 0.0, 1.0 / col_norm, torch.ones_like(col_norm))
     normalizer_recip_x = torch.where(normalizer_x != 0.0, 1.0 / normalizer_x, torch.zeros_like(normalizer_x))
+
+    mu = mu / torch.min(normalizer_x.min(), normalizer_y.min()).item()
+    logging.info(f"[torch_dist] Adjusted mu = {mu:.6e}")
 
     if rank == 0:
         logging.info(f"[torch_dist] Initialization time = {time.time() - t0_init:.4f} seconds")
@@ -526,8 +529,12 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
         a_curr = step
         A_accum += a_curr
 
-        # F_bar = tilde + (a_old/a_curr) * (F_prev - tilde_prev)
-        ratio_bar = a_old / max(a_curr, eps)
+        # F_bar = tilde + ratio_bar * (F_prev - tilde_prev)
+        if strong_convexity:
+            omega_k = (1.0 + rho * beta * mu * a_curr) / (1.0 + mu * a_curr)
+            ratio_bar = (a_old * omega_k) / max(a_curr, eps)
+        else:
+            ratio_bar = a_old / max(a_curr, eps)
         Fbar_x = tilde_x + ratio_bar * (F_x_prev - tilde_x_prev)
         Fbar_y = tilde_y + ratio_bar * (F_y_prev - tilde_y_prev)
 
@@ -630,7 +637,7 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
     beta = parameters["beta"]
     gamma = parameters["gamma"]
     rho = parameters["rho"]
-    eps = parameters.get("eps", 1e-8)
+    eps = parameters.get("eps", 1e-12)
 
     rho_0 = min(rho, beta * (1 + beta) * (1 - gamma))
     eta = ((gamma * (1 + beta)) / (1 + beta ** 2)) ** 0.5

@@ -50,6 +50,8 @@ def parse_commandline():
     parser.add_argument('--gamma', type=float, required=True, help='ADUCA parameter gamma')
     parser.add_argument('--rho', type=float, default=0.0, help='ADUCA parameter rho')
     parser.add_argument('--mu', type=float, default=0.0, help='Mu (unused in this ADUCA variant)')
+    parser.add_argument('--strong-convexity', '--strong_convexity', dest='strong_convexity',
+                        action='store_true', help='Enable strong convexity ratio_bar update')
     parser.add_argument('--block_size', type=int, default=1, help='x-block size (for iteration accounting)')
     parser.add_argument('--block_size_2', type=int, default=10**9, help='y-block size (for iteration accounting)')
     parser.add_argument('--dist_backend', type=str, default='nccl', choices=['nccl', 'gloo'], help='torch.distributed backend')
@@ -107,6 +109,7 @@ def main():
         "gamma": args.gamma,
         "rho": args.rho,
         "mu": args.mu,
+        "strong_convexity": args.strong_convexity,
         "block_size": args.block_size,
         "block_size_2": args.block_size_2,
 

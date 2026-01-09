@@ -268,8 +268,8 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     normalizer_x = torch.where(col_norm != 0.0, 1.0 / col_norm, torch.ones_like(col_norm))
     normalizer_recip_x = torch.where(normalizer_x != 0.0, 1.0 / normalizer_x, torch.zeros_like(normalizer_x))
 
-    mu = mu / torch.min(normalizer_x.min(), normalizer_y.min()).item()
-    logging.info(f"[torch_dist] Adjusted mu = {mu:.6e}")
+    # mu = mu / torch.min(normalizer_x.min(), normalizer_y.min()).item()
+    # logging.info(f"[torch_dist] Adjusted mu = {mu:.6e}")
 
     if rank == 0:
         logging.info(f"[torch_dist] Initialization time = {time.time() - t0_init:.4f} seconds")

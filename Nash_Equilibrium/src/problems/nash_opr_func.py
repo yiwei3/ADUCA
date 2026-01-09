@@ -12,43 +12,48 @@ class NASHOprFunc:
         self.L = L
         # Prevent zero/negative totals from hitting invalid power operations
         self._min_total_quantity = 1e-12
+        self._inv_beta = 1.0 / self.beta
+        self._inv_beta_plus_one = 1.0 + self._inv_beta
+        self._coef_f = 1.0 / self._inv_beta_plus_one
+        self._L_pow = np.power(self.L, self._inv_beta)
+        self._p_const = 5000 ** (1.0 / self.gamma)
+        self._dp_const = -(1.0 / self.gamma) * self._p_const
+        self._p_power = -1.0 / self.gamma
+        self._dp_power = -1.0 / self.gamma - 1.0
 
     def _clip_total_quantity(self, Q):
         return max(Q, self._min_total_quantity)
 
     def f(self, q):
         q = np.maximum(q, 0)
-        t = 1/self.beta
-        res = self.c * q + 1/(1+t)*(self.L**t * q**(1+t))
+        res = self.c * q + self._coef_f * (self._L_pow * np.power(q, self._inv_beta_plus_one))
         return res
     
     def f_block(self, q, block:range):
         q_block = np.maximum(q[block], 0)
-        t = 1./self.beta[block]
-        res = self.c[block] * q_block + 1./(1.+t[block])*(self.L[block]**t * q_block**(1+t))
+        t = self._inv_beta[block]
+        res = self.c[block] * q_block + (1.0 / (1.0 + t)) * (self._L_pow[block] * np.power(q_block, 1.0 + t))
         return res
 
     def df(self, q):
         q = np.maximum(q, 0)
-        t = 1./self.beta
-        res = self.c + (self.L* q)**t
+        res = self.c + self._L_pow * np.power(q, self._inv_beta)
         return res
     
     def df_block(self, q_block, block:range):
         q_block = np.maximum(q_block, 0)
-        t = 1./self.beta[block]
-        res = self.c[block] + (self.L[block]* q_block)**t
+        t = self._inv_beta[block]
+        res = self.c[block] + self._L_pow[block] * np.power(q_block, t)
         return res
     
     def p(self, Q):
         Q = self._clip_total_quantity(Q)
-        return (5000**(1/self.gamma)) * (Q**(-1/self.gamma))
+        return self._p_const * (Q ** self._p_power)
         
     
     def dp(self, Q):
         Q = self._clip_total_quantity(Q)
-        res = -1./self.gamma * (5000**(1./self.gamma)) * (Q**(-1/self.gamma - 1))
-        return res
+        return self._dp_const * (Q ** self._dp_power)
     
     def func_map(self, q):
         Q = np.sum(q)
@@ -60,9 +65,21 @@ class NASHOprFunc:
         return res
     
     def func_map_block_update(self, F, q, p, p_, dp, dp_, block:range):
-        F[block] = self.df_block(q[block], block) - p - q[block] * dp
-        F[:block.start] += (p_ - p) + q[:block.start]*(dp_ - dp)
-        F[block.stop:] += (p_ - p) + q[block.stop:]*(dp_ - dp)
+        q_block = q[block]
+        F[block] = self.df_block(q_block, block) - p - q_block * dp
+        delta_p = p_ - p
+        delta_dp = dp_ - dp
+        if delta_p != 0.0 or delta_dp != 0.0:
+            if block.start > 0:
+                if delta_p != 0.0:
+                    F[:block.start] += delta_p
+                if delta_dp != 0.0:
+                    F[:block.start] += q[:block.start] * delta_dp
+            if block.stop < q.size:
+                if delta_p != 0.0:
+                    F[block.stop:] += delta_p
+                if delta_dp != 0.0:
+                    F[block.stop:] += q[block.stop:] * delta_dp
         return F
 
     # def func_map_block_sample(self, j, t, x):

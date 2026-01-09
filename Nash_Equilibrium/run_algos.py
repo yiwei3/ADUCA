@@ -16,10 +16,11 @@ from src.problems.GMVI_func import GMVIProblem
 from src.problems.nash_opr_func import NASHOprFunc
 from src.problems.nash_g_func import NASHGFunc
 from src.algorithms.utils.results import Results, logresult
-from src.algorithms.coder import coder, coder_linesearch
-from src.algorithms.pccm import pccm
-from src.algorithms.gr import gr
+from src.algorithms.coder import coder, coder_linesearch, coder_normalized, coder_linesearch_normalized
+from src.algorithms.pccm import pccm, pccm_normalized
+from src.algorithms.gr import gr, gr_normalized
 from src.algorithms.aduca import aduca
+from src.algorithms.aduca_torch_dist import aduca_distributed
 
 import pickle
 
@@ -44,6 +45,16 @@ def parse_commandline():
     parser.add_argument('--rho', type = float, default=0.0, help='aduca constant parameter')
     parser.add_argument('--block_size', type = int, default=1, help='block_size parameter >= 1, <= n')
     parser.add_argument('--seed', type=int, default=None, help='Random seed (default: random)')
+    parser.add_argument('--strong-convexity', '--strong_convexity', dest='strong_convexity',
+                        action='store_true', help='Enable strong convexity ratio_bar update (ADUCA_torch_dist)')
+    parser.add_argument('--dist_backend', type=str, default='nccl', choices=['nccl', 'gloo'],
+                        help='torch.distributed backend (ADUCA_torch_dist)')
+    parser.add_argument('--dtype', type=str, default='float32', choices=['float32', 'float64'],
+                        help='Torch dtype (ADUCA_torch_dist)')
+    parser.add_argument('--reduce_dtype', type=str, default=None, choices=['float32', 'float64'],
+                        help='Reduction dtype (ADUCA_torch_dist)')
+    parser.add_argument('--sync_step', action='store_true',
+                        help='Broadcast step size each iter (ADUCA_torch_dist)')
 
     return parser.parse_args()
 
@@ -59,8 +70,8 @@ def main():
     if scenario not in {1,2,3,4,5,6,7,8,9}:
         raise ValueError("Invalid scenario selected.")
 
-    n=1000
-    logging.info(f"scenario: {scenario}, n: {1000}")
+    n=1_000_000
+    logging.info(f"scenario: {scenario}, n: {n}")
     logging.info("--------------------------------------------------")
     
     # Exit criterion
@@ -77,7 +88,7 @@ def main():
     logging.info("--------------------------------------------------")
 
     # Problem instance instantiation
-    rng = np.random.default_rng(args.seed)
+    rng = np.random.default_rng(args.seed) if args.seed is not None else np.random.default_rng(1)
     if args.seed is not None:
         logging.info(f"Random seed: {args.seed}")
     else:
@@ -141,12 +152,29 @@ def main():
         coder_params = {"L": L, "mu": mu, "block_size": block_size}
         output, output_x = coder(problem, exitcriterion, coder_params)
 
+    elif algorithm == "CODER_normalized":
+        logging.info("Running CODER_normalized...")
+        L = args.lipschitz
+        mu = args.mu
+        block_size = args.block_size
+        beta = args.beta
+        coder_params = {"L": L, "mu": mu, "block_size": block_size, "beta": beta}
+        output, output_x = coder_normalized(problem, exitcriterion, coder_params)
+
     elif algorithm == "CODER_linesearch":
         logging.info("Running CODER_linesearch...")
         mu = args.mu
         block_size = args.block_size
         coder_params = {"mu": mu, "block_size": block_size}
         output, output_x = coder_linesearch(problem, exitcriterion, coder_params)
+
+    elif algorithm == "CODER_linesearch_normalized":
+        logging.info("Running CODER_linesearch_normalized...")
+        mu = args.mu
+        block_size = args.block_size
+        beta = args.beta
+        coder_params = {"mu": mu, "block_size": block_size, "beta": beta}
+        output, output_x = coder_linesearch_normalized(problem, exitcriterion, coder_params)
 
     elif algorithm == "PCCM":
         logging.info("Running PCCM...")
@@ -156,12 +184,28 @@ def main():
         pccm_params = {"L": L, "mu": mu, "block_size": block_size}
         output, output_x = pccm(problem, exitcriterion, pccm_params)
 
+    elif algorithm == "PCCM_normalized":
+        logging.info("Running PCCM_normalized...")
+        L = args.lipschitz
+        mu = args.mu
+        block_size = args.block_size
+        beta = args.beta
+        pccm_params = {"L": L, "mu": mu, "block_size": block_size, "beta": beta}
+        output, output_x = pccm_normalized(problem, exitcriterion, pccm_params)
+
     elif algorithm == "GR":
         beta = args.beta
         block_size = args.block_size
         logging.info("Running Golden Ratio...")
         param = {"beta": beta, "block_size": block_size}
         output, output_x = gr(problem, exitcriterion, param)
+
+    elif algorithm == "GR_normalized":
+        beta = args.beta
+        block_size = args.block_size
+        logging.info("Running Golden Ratio (normalized)...")
+        param = {"beta": beta, "block_size": block_size}
+        output, output_x = gr_normalized(problem, exitcriterion, param)
 
     elif algorithm == "ADUCA":
         beta = args.beta
@@ -172,6 +216,30 @@ def main():
         logging.info("Running ADUCA...")
         param = {"beta": beta, "gamma": gamma, "rho": rho, "mu": mu, "block_size": block_size}
         output, output_x = aduca(problem, exitcriterion, param)
+
+    elif algorithm == "ADUCA_torch_dist":
+        beta = args.beta
+        gamma = args.gamma
+        rho = args.rho
+        mu = args.mu
+        block_size = args.block_size
+        logging.info("Running ADUCA (torch distributed)...")
+        param = {
+            "beta": beta,
+            "gamma": gamma,
+            "rho": rho,
+            "mu": mu,
+            "strong_convexity": args.strong_convexity,
+            "block_size": block_size,
+            "backend": "torch_dist",
+            "dist_backend": args.dist_backend,
+            "dtype": args.dtype,
+        }
+        if args.reduce_dtype is not None:
+            param["reduce_dtype"] = args.reduce_dtype
+        if args.sync_step:
+            param["sync_step"] = True
+        output, output_x = aduca_distributed(problem, exitcriterion, param)
 
     else:
         print("Wrong algorithm name supplied")

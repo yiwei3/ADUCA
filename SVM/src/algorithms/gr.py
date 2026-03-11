@@ -97,7 +97,7 @@ def gr(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, x_0=None
     start_time = time.time()
     results = Results()
     init_opt_measure = problem.func_value(x_0)
-    logresult(results, 1, 0.0, init_opt_measure)
+    logresult(results, 0, 0.0, init_opt_measure)
 
     while not exit_flag:
         step, L = gr_stepsize(a, a_, x, x_, F, F_)
@@ -118,8 +118,8 @@ def gr(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, x_0=None
 
         x_hat = (A - a)/A * x_hat + a/A * x
 
-        iteration += m
-        if iteration % ( m *  exit_criterion.loggingfreq) == 0:
+        iteration += 1
+        if iteration % exit_criterion.loggingfreq == 0:
             elapsed_time = time.time() - start_time
             opt_measure = problem.func_value(x)
             logging.info(f"elapsed_time: {elapsed_time}, iteration: {iteration}, opt_measure: {opt_measure}")
@@ -189,7 +189,7 @@ def gr_normalized(problem: GMVIProblem, exit_criterion: ExitCriterion, parameter
     start_time = time.time()
     results = Results()
     init_opt_measure = problem.func_value(x_0)
-    logresult(results, 1, 0.0, init_opt_measure)
+    logresult(results, 0, 0.0, init_opt_measure)
 
     # Flattened normalizers for vectorized updates
     normalizer_x = np.concatenate(normalizers_1) if normalizers_1 else np.array([], dtype=float)
@@ -229,8 +229,8 @@ def gr_normalized(problem: GMVIProblem, exit_criterion: ExitCriterion, parameter
 
         x_hat = (A - a) / A * x_hat + a / A * x
 
-        iteration += m
-        if iteration % (m * exit_criterion.loggingfreq) == 0:
+        iteration += 1
+        if iteration % exit_criterion.loggingfreq == 0:
             elapsed_time = time.time() - start_time
             opt_measure = problem.func_value(x)
             logging.info(f"elapsed_time: {elapsed_time}, iteration: {iteration}, opt_measure: {opt_measure}")

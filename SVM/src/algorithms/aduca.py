@@ -106,7 +106,7 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
     start_time = time.time()
     results = Results()
     init_opt_measure = problem.func_value(u_)
-    logresult(results, 1, 0.0, init_opt_measure)
+    logresult(results, 0, 0.0, init_opt_measure)
 
     u = np.copy(u_0)
     u_ = np.copy(u_0)
@@ -238,9 +238,9 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
         u_hat = ((A - a) * u_hat / A) + (a*u_ / A)
 
         # Increment iteration counters
-        k += m
+        k += 1
         
-        if k % (m *  exit_criterion.loggingfreq) == 0:
+        if k % exit_criterion.loggingfreq == 0:
             # Compute averaged variables
             # step, L, L_hat = aduca_stepsize(normalizers, normalizers_recip, u, u_, a, a_, F, F_, F_tilde)
             # a_ = a

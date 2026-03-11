@@ -106,7 +106,7 @@ def pccm(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=None
     results = Results()
 
     init_optmeasure = problem.func_value(x0)
-    logresult(results, 1, 0.0, init_optmeasure)
+    logresult(results, 0, 0.0, init_optmeasure)
 
     while not exitflag:
         np.copyto(x_prev, x)
@@ -147,9 +147,9 @@ def pccm(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=None
                 F_store = problem.operator_func.func_map_block_update(F_store, x[block], x_prev[block], block)
 
         x_tilde_sum += a * x
-        iteration += m
+        iteration += 1
 
-        if iteration % (m * exitcriterion.loggingfreq) == 0:
+        if iteration % exitcriterion.loggingfreq == 0:
             elapsed_time = time.time() - starttime
             opt_measure = problem.func_value(x)
             logging.info(f"Elapsed time: {elapsed_time}, Iteration: {iteration}, Opt measure: {opt_measure}")
@@ -213,7 +213,7 @@ def pccm_normalized(problem: GMVIProblem, exitcriterion: ExitCriterion, paramete
     results = Results()
 
     init_optmeasure = problem.func_value(x0)
-    logresult(results, 1, 0.0, init_optmeasure)
+    logresult(results, 0, 0.0, init_optmeasure)
 
     while not exitflag:
         np.copyto(x_prev, x)
@@ -262,9 +262,9 @@ def pccm_normalized(problem: GMVIProblem, exitcriterion: ExitCriterion, paramete
                 F_store = problem.operator_func.func_map_block_update(F_store, x[block], x_prev[block], block)
 
         x_tilde_sum += a * x
-        iteration += m
+        iteration += 1
 
-        if iteration % (m * exitcriterion.loggingfreq) == 0:
+        if iteration % exitcriterion.loggingfreq == 0:
             elapsed_time = time.time() - starttime
             opt_measure = problem.func_value(x)
             logging.info(f"Elapsed time: {elapsed_time}, Iteration: {iteration}, Opt measure: {opt_measure}")
@@ -272,4 +272,3 @@ def pccm_normalized(problem: GMVIProblem, exitcriterion: ExitCriterion, paramete
             exitflag = CheckExitCondition(exitcriterion, iteration, elapsed_time, opt_measure)
 
     return results, x
-

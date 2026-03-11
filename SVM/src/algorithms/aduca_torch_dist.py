@@ -176,7 +176,7 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
         logging.info(f"C_hat = {C_hat}")
         logging.info(f"mu: {mu}")
 
-    # Iteration accounting to match the original code (k += m per full block sweep)
+    # Count one iteration per full block sweep.
     block_size = _as_int_blocksize(parameters.get("block_size", 1), default=1)          # x-block size
     block_size_2 = _as_int_blocksize(parameters.get("block_size_2", n), default=n)      # y-block size
     m_1 = (d + block_size - 1) // block_size
@@ -530,10 +530,10 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
 
     init_measure = compute_objective_current()
     if rank == 0:
-        logresult(results, 1, 0.0, init_measure)
+        logresult(results, 0, 0.0, init_measure)
 
     # Iteration counters
-    k = 0  # "block queries"
+    k = 0  # full block sweeps
     exit_flag = False
 
     # ----------------------------
@@ -737,10 +737,10 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
         vy_prev = vy
 
         # Increment iteration counters
-        k += m
+        k += 1
 
         # Logging and exit checks
-        if k % (m * exit_criterion.loggingfreq) == 0:
+        if k % exit_criterion.loggingfreq == 0:
             elapsed = time.time() - start_time
             measure = compute_objective_current()
 
@@ -882,7 +882,7 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
     start_time = time.time()
     results = Results()
     init_opt_measure = problem.func_value(u_)
-    logresult(results, 1, 0.0, init_opt_measure)
+    logresult(results, 0, 0.0, init_opt_measure)
 
     u = np.copy(u_0)
     u_ = np.copy(u_0)
@@ -993,9 +993,9 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
 
         u_hat = ((A - a) * u_hat / A) + (a * u_ / A)
 
-        k += m
+        k += 1
 
-        if k % (m * exit_criterion.loggingfreq) == 0:
+        if k % exit_criterion.loggingfreq == 0:
             elapsed_time = time.time() - start_time
             opt_measure = problem.func_value(u)
             logging.info(f"elapsed_time: {elapsed_time}, iteration: {k}, opt_measure: {opt_measure}")
@@ -1016,13 +1016,13 @@ def aduca_distributed(problem: GMVIProblem, exit_criterion: ExitCriterion, param
     Unified entry point.
 
     - Default: original NumPy implementation (single-process).
-    - Set parameters["backend"] = "torch_dist" (or parameters["torch_distributed"]=True) to enable
-      PyTorch Distributed (multi-process, multi-GPU).
+    - Set parameters["backend"] = "torch_dist" to enable PyTorch Distributed
+      (multi-process, multi-GPU).
 
     NOTE: The torch_dist backend is currently specialized for the SVM saddle-point problem.
     """
     backend = str(parameters.get("backend", "numpy")).lower()
-    if parameters.get("torch_distributed", True) or backend in ("torch_dist", "torch_distributed", "ddp", "pytorch_dist"):
+    if backend == "torch_dist":
         logging.info("Using PyTorch Distributed backend for ADUCA SVM.")
         return _aduca_torch_distributed_svm(problem, exit_criterion, parameters, u_0=u_0)
     return _aduca_numpy_reference(problem, exit_criterion, parameters, u_0=u_0)

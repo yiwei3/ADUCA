@@ -130,7 +130,7 @@ def coder(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=Non
     results = Results()
 
     init_optmeasure = problem.func_value(x0)
-    logresult(results, 1, 0.0, init_optmeasure)
+    logresult(results, 0, 0.0, init_optmeasure)
 
     while not exitflag:
         np.copyto(x_prev, x)
@@ -180,9 +180,9 @@ def coder(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=Non
 
         x_tilde_sum += a * x
         x_tilde = x_tilde_sum / A
-        iteration += m
+        iteration += 1
 
-        if iteration % (m * exitcriterion.loggingfreq) == 0:
+        if iteration % exitcriterion.loggingfreq == 0:
             elapsed_time = time.time() - starttime
             opt_measure = problem.func_value(x)
             logging.info(f"Elapsed time: {elapsed_time}, Iteration: {iteration}, Opt measure: {opt_measure}")
@@ -246,7 +246,7 @@ def coder_normalized(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
     results = Results()
 
     init_optmeasure = problem.func_value(x0)
-    logresult(results, 1, 0.0, init_optmeasure)
+    logresult(results, 0, 0.0, init_optmeasure)
 
     while not exitflag:
         np.copyto(x_prev, x)
@@ -297,9 +297,9 @@ def coder_normalized(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
                 F_store = problem.operator_func.func_map_block_update(F_store, x[block], x_prev[block], block)
 
         x_tilde_sum += a * x
-        iteration += m
+        iteration += 1
 
-        if iteration % (m * exitcriterion.loggingfreq) == 0:
+        if iteration % exitcriterion.loggingfreq == 0:
             elapsed_time = time.time() - starttime
             opt_measure = problem.func_value(x)
             logging.info(f"Elapsed time: {elapsed_time}, Iteration: {iteration}, Opt measure: {opt_measure}")
@@ -361,7 +361,7 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
     results = Results()
 
     init_optmeasure = problem.func_value(x0)
-    logresult(results, 1, 0.0, init_optmeasure)
+    logresult(results, 0, 0.0, init_optmeasure)
 
     while not exitflag:
         np.copyto(x_prev, x)
@@ -425,7 +425,7 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
             # Step 15
             norm_F_p = np.linalg.norm(temp_F_store - temp_p)
             norm_x = np.linalg.norm(temp_x - x_prev)
-            iteration += m
+            iteration += 1
 
             if norm_F_p <= L * norm_x:
                 x = temp_x
@@ -436,7 +436,7 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
 
         x_tilde_sum += a * x
 
-        if iteration % (m * exitcriterion.loggingfreq) == 0:
+        if iteration % exitcriterion.loggingfreq == 0:
             logging.info(f"L (linesearch) = {L}")
             elapsed_time = time.time() - starttime
             opt_measure = problem.func_value(x)
@@ -508,7 +508,7 @@ def coder_linesearch_normalized(problem: GMVIProblem, exitcriterion: ExitCriteri
     results = Results()
 
     init_optmeasure = problem.func_value(x0)
-    logresult(results, 1, 0.0, init_optmeasure)
+    logresult(results, 0, 0.0, init_optmeasure)
 
     while not exitflag:
         np.copyto(x_prev, x)
@@ -588,7 +588,7 @@ def coder_linesearch_normalized(problem: GMVIProblem, exitcriterion: ExitCriteri
             ls_norm_dx = np.linalg.norm((temp_x - x_prev) * np.sqrt(precond_recip))
             # norm_F_p = np.linalg.norm((temp_F_store - temp_p))
             # norm_x = np.linalg.norm((temp_x - x_prev))
-            iteration += m
+            iteration += 1
 
             if ls_norm_F_p <= L * ls_norm_dx:
                 x = temp_x
@@ -600,7 +600,7 @@ def coder_linesearch_normalized(problem: GMVIProblem, exitcriterion: ExitCriteri
         x_tilde_sum += a * x
         x_tilde = x_tilde_sum / A
 
-        if iteration % (m * exitcriterion.loggingfreq) == 0:
+        if iteration % exitcriterion.loggingfreq == 0:
             logging.info(f"L (linesearch) = {L}")
             elapsed_time = time.time() - starttime
             opt_measure = problem.func_value(x)

@@ -3,13 +3,14 @@ import socket
 import os
 import subprocess
 import shlex
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Datasets to run (files must exist in ./data)
 datasets = [
-    # 'a9a',
-    # 'gisette_scale.bz2',
+    'a9a',
+    'gisette_scale.bz2',
     # 'w8a',
     # 'real-sim',
     # 'epsilon_normalized.t.bz2',
@@ -18,8 +19,8 @@ datasets = [
 ]
 
 # GPU visibility (set to None to use the existing environment)
-cuda_visible_devices = "0,1,2,3,4,5,6,7"
-nproc_per_node = 8  # number of GPUs to use
+cuda_visible_devices = "1,2,4,5,6,7"
+nproc_per_node = 6  # number of GPUs to use
 env = os.environ.copy()
 if cuda_visible_devices is not None:
     if isinstance(cuda_visible_devices, (list, tuple)):
@@ -30,19 +31,20 @@ if cuda_visible_devices is not None:
 dtype = 'float64'  # 'float32' or 'float64'
 
 # Strong convexity toggle for ADUCA_TORCH_DIST
-strong_convexity = False   # Only for extrapolation term; do not change the stepsizes
+strong_convexity = True   # Only for extrapolation term; do not change the stepsizes
 
 DIST_BOOL_PARAMS = {'use_dense', 'strong_convexity'}
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 algorithms = [
+    # 'PCCM',
     # 'CODER',
     # 'CODER_linesearch',
+    # 'GR',
+    # 'PCCM_normalized',
     # 'CODER_normalized',
     # 'CODER_linesearch_normalized',
-    # 'PCCM_normalized',
-    # 'PCCM',
-    'GR',
-    'GR_normalized',
+    # 'GR_normalized',
     # 'ADUCA',
     'ADUCA_TORCH_DIST',
 ]
@@ -62,56 +64,56 @@ output_run_dir.mkdir(parents=True, exist_ok=True)
 # Base parameters shared by all runs (overridable per dataset)
 base_params = {
     'outputdir': str(output_run_dir),
-    'maxtime': 500_000,
-    'targetaccuracy': 1e-12,
+    'maxtime': 11_000,
+    'targetaccuracy': 0,
     'lambda1': 1e-4,
     'lambda2': 1e-4,
-    'mu': 1e-4,
+    'mu': 0,
     'block_size': 64,
     'block_size_2': 512,
-    'loggingfreq': 20,
+    'loggingfreq': 1,
 }
 
 # Per-dataset overrides (edit as needed)
 dataset_params = {
     'a9a': {
-        'maxiter': 100_000, 
+        'maxiter': 11_000, 
         'lipschitz': 
-        0.014,
-        # 0.0006, # preconditioned
+        # 0.014,
+        0.0007, # preconditioned
     },
     'gisette_scale.bz2': {
-        'maxiter': 100_000, 
+        'maxiter': 11_000, 
         'lipschitz': 
-        0.75,
-        # 0.01, # preconditioned
+        # 0.75,
+        0.01, # preconditioned
     },
     'epsilon_normalized.t.bz2': {
-        'maxiter': 100_000, 
+        'maxiter': 11_000, 
         'lipschitz': 
-        0.002,
-        # 0.0007, # preconditioned
+        # 0.002,
+        0.0007, # preconditioned
     },
     'w8a': {
-        'maxiter': 100_000, 
+        'maxiter': 11_000, 
         'lipschitz': 
         # 0.007, 
         0.0004, # preconditioned
     },
     'real-sim': {
-        'maxiter': 100_000, 
+        'maxiter': 11_000, 
         'lipschitz': 
         # 0.0004, 
         0.0002, # preconditioned
     },
     'rcv1_train.binary.bz2': {
-        'maxiter': 100_000, 
+        'maxiter': 11_000, 
         'lipschitz':
         # 0.001,
         0.0006, # preconditioned
     },
     "news20.binary.bz2": {
-        'maxiter': 100_000,
+        'maxiter': 11_000,
         'lipschitz':
         0.0005,
     },
@@ -125,50 +127,41 @@ algorithm_param_sets = {
     'GR_normalized': [
         {'beta': 0.7},
     ],
-    'GR_TORCH': [
-        {'beta': 0.7},
-    ],
-    'GR_TORCH_normalized': [
-        {'beta': 0.7},
-    ],
     'ADUCA': [
-        {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3},
         {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2},
         # {'beta': 0.85, 'gamma': 0.3, 'rho': 1.1},
-        {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1},
+        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1},
     ],
     'ADUCA_TORCH_DIST': [
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl'},
         {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'mu': 0,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-1,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-2,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-3,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-4,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-5,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 0,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-1,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-2,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-3,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-4,},
-        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-5,},
+        {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'mu': 1e-1,},
+        {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'mu': 1e-2,},
+        {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'mu': 1e-3,},
+        {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'mu': 1e-4,},
+        {'beta': 0.7, 'gamma': 0.05, 'rho': 1.2, 'mu': 1e-5,},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'mu': 0,},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'mu': 1e-1,},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'mu': 1e-2,},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'mu': 1e-3,},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'mu': 1e-4,},
+        # {'beta': 0.7, 'gamma': 0.05, 'rho': 1.3, 'mu': 1e-5,},
         {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'mu': 0,},
-        # {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-1,},
-        # {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-2,},
-        # {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-3,},
-        # {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-4},
-        # {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-5,},
-        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl'},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'mu': 1e-1,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'mu': 1e-2,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'mu': 1e-3,},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'mu': 1e-4},
+        {'beta': 0.8, 'gamma': 0.2, 'rho': 1.2, 'mu': 1e-5,},
         {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'mu': 0,},
-        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-1,},
-        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-2,},
-        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-3,},
-        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-4,},
-        # {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'dist_backend': 'nccl', 'dtype': 'float32', 'mu': 1e-5,},
+        {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'mu': 1e-1,},
+        {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'mu': 1e-2,},
+        {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'mu': 1e-3,},
+        {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'mu': 1e-4,},
+        {'beta': 0.9, 'gamma': 0.3, 'rho': 1.1, 'mu': 1e-5,},
     ],
 }
 
-DIST_SCRIPT = 'run_algos_torch_dist.py'
-DEFAULT_SCRIPT = 'run_algos.py'
+DEFAULT_SCRIPT = SCRIPT_DIR / 'run_algos.py'
 DIST_PARAM_ORDER = [
     'outputdir',
     'maxiter',
@@ -185,8 +178,10 @@ DIST_PARAM_ORDER = [
     'strong_convexity',
     'block_size',
     'block_size_2',
+    'backend',
     'dist_backend',
     'dtype',
+    'use_dense',
     'dense_threshold',
 ]
 
@@ -232,12 +227,14 @@ def run_task(ds: str, algo: str, variant_idx=None, variant_overrides=None):
             params['strong_convexity'] = True
         if dtype is not None:
             params['dtype'] = dtype
+        params['backend'] = 'torch_dist'
         ### Distributed run with --nproc_per_node=j for using j GPUs
         master_port = _find_free_port()
         cmd = ['torchrun', 
                f'--nproc_per_node={nproc_per_node}',
                 '--master-port', str(master_port),
-                DIST_SCRIPT,
+                str(DEFAULT_SCRIPT),
+                '--algo', 'ADUCA',
                 '--dataset', ds]
         for key in DIST_PARAM_ORDER:
             if key not in params:
@@ -249,7 +246,7 @@ def run_task(ds: str, algo: str, variant_idx=None, variant_overrides=None):
                 continue
             cmd += [f'--{key}', str(val)]
     else:
-        cmd = ['python', DEFAULT_SCRIPT, '--algo', algo, '--dataset', ds]
+        cmd = [sys.executable, str(DEFAULT_SCRIPT), '--algo', algo, '--dataset', ds]
         for k, v in params.items():
             cmd += [f'--{k}', str(v)]
 
@@ -261,7 +258,7 @@ def run_task(ds: str, algo: str, variant_idx=None, variant_overrides=None):
 
     with open(log_path, 'w') as logf:
         logf.write('Command: ' + ' '.join(cmd) + '\n\n')
-        result = subprocess.run(cmd, cwd='.', env=env, stdout=logf, stderr=subprocess.STDOUT)
+        result = subprocess.run(cmd, cwd=str(SCRIPT_DIR), env=env, stdout=logf, stderr=subprocess.STDOUT)
     return ds, algo, variant_suffix, result.returncode, log_path
 
 

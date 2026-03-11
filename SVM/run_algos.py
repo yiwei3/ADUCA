@@ -25,6 +25,7 @@ from src.algorithms.rapd import rapd
 from src.algorithms.gr import gr, gr_normalized
 from src.algorithms.gr_torch import gr_torch, gr_torch_normalized
 from src.algorithms.aduca import aduca
+from src.algorithms.aduca_torch_dist import aduca_distributed
 from src.problems.utils.data_parsers import libsvm_parser
 from src.problems.utils.data import Data
 from src.problems.GMVI_func import GMVIProblem
@@ -51,6 +52,19 @@ DATASET_INFO = {
     "news20.binary.bz2": (1355191, 19996),
 }
 
+def _coerce_optional_bool(value):
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value in {"1", "true", "yes", "y", "on"}:
+            return True
+        if value in {"0", "false", "no", "n", "off", ""}:
+            return False
+    raise ValueError(f"Cannot interpret boolean value from {value!r}.")
+
 def parse_commandline():
     parser = argparse.ArgumentParser(description='Run optimization algorithms.')
     parser.add_argument('--outputdir', required=True, help='Output directory')
@@ -64,7 +78,7 @@ def parse_commandline():
     parser.add_argument('--lambda1', type=float, default=0.0, help='Elastic net lambda 1')
     parser.add_argument('--lambda2', type=float, default=0.0, help='Elastic net lambda 2')
     parser.add_argument('--algo', required=True, help='Algorithm to run')
-    parser.add_argument('--lipschitz', required=True, type=float, help='Lipschitz constant')
+    parser.add_argument('--lipschitz', type=float, default=None, help='Lipschitz constant')
     parser.add_argument('--mu', type=float, default=0.0, help='Mu')
     parser.add_argument('--beta', type = float, help='aduca constant parameter')
     parser.add_argument('--gamma', type = float, help='aduca constant parameter')
@@ -73,8 +87,12 @@ def parse_commandline():
     parser.add_argument('--block_size_2', type = int, default=float('inf'), help='block_size parameter >= 1, <= n')
     parser.add_argument('--device', default=None, help='Torch device (e.g. cuda:0)')
     parser.add_argument('--dtype', default='float32', choices=['float32', 'float64'], help='Torch dtype')
-    parser.add_argument('--use_dense', default=None, help='Force dense GEMV for torch (true/false)')
+    parser.add_argument('--use_dense', nargs='?', const='true', default=None, help='Force dense GEMV for torch/distributed backends (true/false)')
     parser.add_argument('--dense_threshold', type=float, default=0.25, help='Auto-dense switch threshold')
+    parser.add_argument('--backend', default=None, choices=['numpy', 'torch_dist'], help='ADUCA backend override')
+    parser.add_argument('--dist_backend', type=str, default='nccl', choices=['nccl', 'gloo'], help='torch.distributed backend')
+    parser.add_argument('--strong-convexity', '--strong_convexity', dest='strong_convexity',
+                        action='store_true', help='Enable strong convexity ratio_bar update for distributed ADUCA')
 
     return parser.parse_args() 
 
@@ -84,6 +102,15 @@ def main():
     outputdir = args.outputdir
     os.makedirs(outputdir, exist_ok=True)
     algorithm = args.algo
+    rank = int(os.environ.get("RANK", "0"))
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    backend_arg = None if args.backend is None else str(args.backend).lower()
+    use_dense = _coerce_optional_bool(args.use_dense)
+    use_dist_aduca = (
+        algorithm in {"ADUCA_TORCH_DIST", "ADUCA_DISTRIBUTED"}
+        or (algorithm == "ADUCA" and backend_arg == "torch_dist")
+    )
+    output_algorithm = "ADUCA_TORCH_DIST" if use_dist_aduca else algorithm
     # Problem Setup
     dataset = args.dataset
     filepath = f"../data/{dataset}"
@@ -108,10 +135,12 @@ def main():
     # Runing
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     logging.info(f"timestamp = {timestamp}")
+    if use_dist_aduca:
+        logging.info(f"Detected rank {rank} / world_size {world_size}")
     logging.info("Completed initialization")
     outputfilename = os.path.join(
         outputdir,
-        f"{dataset}-beta-{args.beta}-mu-{args.mu}-{algorithm}-blocksize-{args.block_size}-{args.block_size_2}-time-{timestamp}.json",
+        f"{dataset}-beta-{args.beta}-mu-{args.mu}-{output_algorithm}-blocksize-{args.block_size}-{args.block_size_2}-time-{timestamp}.json",
     )
     logging.info(f"outputfilename = {outputfilename}")
     logging.info("--------------------------------------------------")
@@ -122,9 +151,14 @@ def main():
     g = SVMElasticGFunc(d, n, lambda1, lambda2)
     problem = GMVIProblem(F, g)
 
+    def require_lipschitz():
+        if args.lipschitz is None:
+            raise ValueError(f"--lipschitz is required for algorithm {algorithm}.")
+        return args.lipschitz
+
     if algorithm == "CODER":
         logging.info("Running CODER...")
-        L = args.lipschitz
+        L = require_lipschitz()
         mu = args.mu
         block_size = args.block_size
         block_size_2 = args.block_size_2
@@ -133,7 +167,7 @@ def main():
 
     elif algorithm == "CODER_normalized":
         logging.info("Running CODER_normalized...")
-        L = args.lipschitz
+        L = require_lipschitz()
         mu = args.mu
         block_size = args.block_size
         block_size_2 = args.block_size_2
@@ -158,7 +192,7 @@ def main():
 
     elif algorithm == "PCCM":
         logging.info("Running PCCM...")
-        L = args.lipschitz
+        L = require_lipschitz()
         mu = args.mu
         block_size = args.block_size
         block_size_2 = args.block_size_2
@@ -167,7 +201,7 @@ def main():
 
     elif algorithm == "PCCM_normalized":
         logging.info("Running PCCM_normalized...")
-        L = args.lipschitz
+        L = require_lipschitz()
         mu = args.mu
         block_size = args.block_size
         block_size_2 = args.block_size_2
@@ -176,7 +210,7 @@ def main():
 
     elif algorithm == "PRCM":
         logging.info("Running PRCM...")
-        L = args.lipschitz
+        L = require_lipschitz()
         mu = args.mu
         block_size = args.block_size
         block_size_2 = args.block_size_2
@@ -231,11 +265,10 @@ def main():
         }
         output, output_x = gr_torch_normalized(problem, exitcriterion, param)
 
-    elif algorithm == "ADUCA":
+    elif algorithm in {"ADUCA", "ADUCA_TORCH_DIST", "ADUCA_DISTRIBUTED"}:
         beta = args.beta
         block_size = args.block_size
         block_size_2 = args.block_size_2
-        logging.info("Running ADUCA...")
         param = {
             "beta": beta,
             "gamma": args.gamma,
@@ -244,21 +277,36 @@ def main():
             "block_size": block_size,
             "block_size_2": block_size_2,
         }
-        output, output_x = aduca(problem, exitcriterion, param)
+        if use_dist_aduca:
+            backend = backend_arg if backend_arg is not None else ("torch_dist" if world_size > 1 else "numpy")
+            logging.info(f"Running distributed ADUCA with backend={backend}...")
+            param.update({
+                "backend": backend,
+                "dist_backend": args.dist_backend,
+                "dtype": args.dtype,
+                "use_dense": bool(use_dense),
+                "dense_threshold": args.dense_threshold,
+                "strong_convexity": args.strong_convexity,
+            })
+            output, output_x = aduca_distributed(problem, exitcriterion, param)
+        else:
+            logging.info("Running ADUCA...")
+            output, output_x = aduca(problem, exitcriterion, param)
 
     else:
         print("Wrong algorithm name supplied")
     
-    with open(outputfilename, 'w') as outfile:
-        json.dump({"args": vars(args), 
-                "output_x": output_x.tolist(),
-                "iterations": output.iterations, 
-                "times": output.times,
-                "optmeasures": output.optmeasures,
-                "L": output.L,
-                "L_hat": output.L_hat}, 
-                outfile)
-        logging.info(f"output saved to {outputfilename}")
+    if (not use_dist_aduca) or rank == 0:
+        with open(outputfilename, 'w') as outfile:
+            json.dump({"args": vars(args), 
+                    "output_x": output_x.tolist(),
+                    "iterations": output.iterations, 
+                    "times": output.times,
+                    "optmeasures": output.optmeasures,
+                    "L": output.L,
+                    "L_hat": output.L_hat}, 
+                    outfile)
+            logging.info(f"output saved to {outputfilename}")
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,6 @@
 import bz2
 import gzip
+import lzma
 from pathlib import Path
 
 import numpy as np
@@ -12,11 +13,13 @@ def _open_libsvm(path):
     """
     path = Path(path)
     with path.open("rb") as f:
-        magic = f.read(3)
+        magic = f.read(6)
     if magic.startswith(b"\x1f\x8b"):  # gzip magic
         return gzip.open(path, "rt", encoding="latin-1", errors="ignore")
     if magic.startswith(b"BZh"):  # bzip2 magic
         return bz2.open(path, "rt", encoding="latin-1", errors="ignore")
+    if magic.startswith(b"\xfd7zXZ\x00"):  # xz magic
+        return lzma.open(path, "rt", encoding="latin-1", errors="ignore")
     return path.open("r", encoding="latin-1", errors="ignore")
 
 

@@ -109,7 +109,7 @@ def coder(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=Non
     y_slice = slice(d, d + n)
 
     a, A = 0.0, 0.0
-    x0 = np.zeros(problem.d) if x0 is None else x0
+    x0 = np.zeros(problem.d, dtype=float) if x0 is None else x0
 
     x = x0.copy()
     x_prev = x0.copy()
@@ -225,7 +225,7 @@ def coder_normalized(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
     y_slice = slice(d, d + n)
 
     a, A = 0.0, 0.0
-    x0 = np.zeros(problem.d) if x0 is None else x0
+    x0 = np.zeros(problem.d, dtype=float) if x0 is None else x0
 
     x = x0.copy()
     x_prev = x0.copy()
@@ -341,7 +341,7 @@ def coder_linesearch(problem: GMVIProblem, exitcriterion: ExitCriterion, paramet
 
     a, A = 0.0, 0.0
 
-    x0 = np.zeros(problem.d) if x0 is None else x0
+    x0 = np.zeros(problem.d, dtype=float) if x0 is None else x0
     x = x0.copy()
     x_prev = x0.copy()
 
@@ -488,7 +488,7 @@ def coder_linesearch_normalized(problem: GMVIProblem, exitcriterion: ExitCriteri
 
     a, A = 0.0, 0.0
 
-    x0 = np.zeros(problem.d) if x0 is None else x0
+    x0 = np.zeros(problem.d, dtype=float) if x0 is None else x0
     x = x0.copy()
     x_prev = x0.copy()
 

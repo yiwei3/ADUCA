@@ -42,14 +42,36 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 ## (Dimension, Sample size)
-DATASET_INFO = { 
+DATASET_INFO = {
     "a9a": (123, 32561),
     "gisette_scale.bz2": (5000, 6000),
     "rcv1_train.binary.bz2": (47236, 20242),
     "w8a": (300, 49749),
-    "real-sim":(20958, 72309),
-    "epsilon_normalized.t.bz2": (2000,100000),
+    "real-sim": (20958, 72309),
+    "epsilon_normalized.t.bz2": (2000, 100000),
     "news20.binary.bz2": (1355191, 19996),
+    "SUSY": (18, 5000000),
+    "HIGGS": (28, 11000000),
+    "ijcnn1": (22, 49990),
+    "cod-rna": (8, 59535),
+    "phishing": (68, 11055),
+    "covtype.binary": (54, 581012),
+}
+
+DATASET_FILES = {
+    "a9a": "a9a",
+    "gisette_scale.bz2": "gisette_scale.bz2",
+    "rcv1_train.binary.bz2": "rcv1_train.binary.bz2",
+    "w8a": "w8a",
+    "real-sim": "real-sim",
+    "epsilon_normalized.t.bz2": "epsilon_normalized.t.bz2",
+    "news20.binary.bz2": "news20.binary.bz2",
+    "SUSY": "SUSY.xz",
+    "HIGGS": "HIGGS.xz",
+    "ijcnn1": "ijcnn1.bz2",
+    "cod-rna": "cod-rna",
+    "phishing": "phishing",
+    "covtype.binary": "covtype.libsvm.binary.bz2",
 }
 
 def _coerce_optional_bool(value):
@@ -73,7 +95,7 @@ def parse_commandline():
     parser.add_argument('--targetaccuracy', required=True, type=float, help='Target accuracy')
     parser.add_argument('--optval', type=float, default=0.0, help='Known optimal value')
     parser.add_argument('--loggingfreq', type=int, default=100, help='Logging frequency')
-    parser.add_argument('--dataset', required=True, help='Choice of dataset')
+    parser.add_argument('--dataset', required=True, choices=sorted(DATASET_INFO), help='Choice of dataset')
     parser.add_argument('--lossfn', default='SVM', help='Choice of loss function')
     parser.add_argument('--lambda1', type=float, default=0.0, help='Elastic net lambda 1')
     parser.add_argument('--lambda2', type=float, default=0.0, help='Elastic net lambda 2')
@@ -113,7 +135,7 @@ def main():
     output_algorithm = "ADUCA_TORCH_DIST" if use_dist_aduca else algorithm
     # Problem Setup
     dataset = args.dataset
-    filepath = f"../data/{dataset}"
+    filepath = f"../data/{DATASET_FILES[dataset]}"
     lambda1 = args.lambda1
     lambda2 = args.lambda2
 

@@ -55,8 +55,8 @@ def gr(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, x_0=None
     beta = parameters["beta"]
     rho = beta + beta**2
     if x_0 is None:
-        x_0 = np.zeros(problem.d)
-    x_1 = np.full(shape=problem.d, fill_value=-0.0001)
+        x_0 = np.zeros(problem.d, dtype=float)
+    x_1 = np.full(problem.d, 1e-4, dtype=float)
 
     x = np.copy(x_1)
     x_ = np.copy(x_0)
@@ -150,8 +150,8 @@ def gr_normalized(problem: GMVIProblem, exit_criterion: ExitCriterion, parameter
     beta = parameters["beta"]
     rho = beta + beta**2
     if x_0 is None:
-        x_0 = np.zeros(problem.d)
-    x_1 = np.full(shape=problem.d, fill_value=-0.0001)
+        x_0 = np.zeros(problem.d, dtype=float)
+    x_1 = np.full(problem.d, 1e-4, dtype=float)
 
     x = np.copy(x_1)
     x_ = np.copy(x_0)

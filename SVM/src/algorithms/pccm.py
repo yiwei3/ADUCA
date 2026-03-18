@@ -85,7 +85,7 @@ def pccm(problem: GMVIProblem, exitcriterion: ExitCriterion, parameters, x0=None
     y_slice = slice(d, d + n)
 
     a, A = 0.0, 0.0
-    x0 = np.zeros(problem.d) if x0 is None else x0
+    x0 = np.zeros(problem.d, dtype=float) if x0 is None else x0
 
     x = x0.copy()
     x_prev = x0.copy()
@@ -192,7 +192,7 @@ def pccm_normalized(problem: GMVIProblem, exitcriterion: ExitCriterion, paramete
     y_slice = slice(d, d + n)
 
     a, A = 0.0, 0.0
-    x0 = np.zeros(problem.d) if x0 is None else x0
+    x0 = np.zeros(problem.d, dtype=float) if x0 is None else x0
 
     x = x0.copy()
     x_prev = x0.copy()

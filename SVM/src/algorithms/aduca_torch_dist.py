@@ -134,13 +134,35 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     rank = dist.get_rank()
     world_size = dist.get_world_size()
     local_rank = int(os.environ.get("LOCAL_RANK", rank))
+    visible_devices = [
+        entry.strip()
+        for entry in os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
+        if entry.strip()
+    ]
+    physical_device = visible_devices[local_rank] if local_rank < len(visible_devices) else None
 
     logging.info(f"[torch_dist] rank {rank}/{world_size} initialized (local_rank={local_rank})")
 
     use_cuda = torch.cuda.is_available()
+    visible_cuda_count = torch.cuda.device_count() if use_cuda else 0
+    if use_cuda and local_rank >= visible_cuda_count:
+        raise RuntimeError(
+            f"[torch_dist] local_rank={local_rank} but only {visible_cuda_count} CUDA device(s) "
+            f"are visible to this process. CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')!r}. "
+            "Check CUDA_VISIBLE_DEVICES and nproc_per_node."
+        )
+
     device = torch.device(f"cuda:{local_rank}" if use_cuda else "cpu")
     if device.type == "cuda":
-        torch.cuda.set_device(device)
+        try:
+            torch.cuda.set_device(device)
+        except Exception as exc:
+            raise RuntimeError(
+                f"[torch_dist] Failed to bind rank {rank} (local_rank={local_rank}) to {device}. "
+                f"physical_device={physical_device!r}, "
+                f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')!r}. "
+                "This usually indicates GPU contention across multiple torchrun jobs or an unavailable device."
+            ) from exc
 
     # Reduce log spam from non-zero ranks
     if rank != 0:
@@ -366,13 +388,29 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
         local_num_hat = num_hat_x / float(world_size) + num_hat_y
         dist.all_reduce(local_num_hat, op=dist.ReduceOp.SUM)
         return local_num, local_den, local_num_hat
+    
+    def global_weighted_F_norm_sq(x_part, y_part):
+        # x_part is replicated: divide by world_size before reduction
+        num_x = torch.sum((normalizer_x * (x_part ** 2)).to(torch.float64))
+        num_y = torch.sum((normalizer_y * (y_part ** 2)).to(torch.float64))
+        local = num_x / float(world_size) + num_y
+        dist.all_reduce(local, op=dist.ReduceOp.SUM)
+        return local
+
+    def global_weighted_u_norm_sq(x_part, y_part):
+        # x_part is replicated: divide by world_size before reduction
+        den_x = torch.sum((normalizer_recip_x * (x_part ** 2)).to(torch.float64))
+        den_y = torch.sum((normalizer_recip_y * (y_part ** 2)).to(torch.float64))
+        local = den_x / float(world_size) + den_y
+        dist.all_reduce(local, op=dist.ReduceOp.SUM)
+        return local
 
     # ----------------------------
     # Initialize u0, v0
     # ----------------------------
     if u_0 is None:
-        x0 = torch.zeros(d, device=device, dtype=vec_dtype)
-        y0 = torch.zeros(n_local, device=device, dtype=vec_dtype)
+        x0 = torch.zeros((d,), device=device, dtype=vec_dtype)
+        y0 = torch.zeros((n_local,), device=device, dtype=vec_dtype)
     else:
         u_0 = np.asarray(u_0)
         if u_0.shape[0] != d + n:
@@ -403,22 +441,6 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     alpha_ls = 2.0
     i_ls = 0
     a0 = 1.0
-
-    def global_weighted_F_norm_sq(x_part, y_part):
-        # x_part is replicated: divide by world_size before reduction
-        num_x = torch.sum((normalizer_x * (x_part ** 2)).to(torch.float64))
-        num_y = torch.sum((normalizer_y * (y_part ** 2)).to(torch.float64))
-        local = num_x / float(world_size) + num_y
-        dist.all_reduce(local, op=dist.ReduceOp.SUM)
-        return local
-
-    def global_weighted_u_norm_sq(x_part, y_part):
-        # x_part is replicated: divide by world_size before reduction
-        den_x = torch.sum((normalizer_recip_x * (x_part ** 2)).to(torch.float64))
-        den_y = torch.sum((normalizer_recip_y * (y_part ** 2)).to(torch.float64))
-        local = den_x / float(world_size) + den_y
-        dist.all_reduce(local, op=dist.ReduceOp.SUM)
-        return local
 
     # Initial prox and Lipschitz estimates
     z_x = x0 - a0 * (normalizer_x * F_x0)
@@ -865,7 +887,7 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
     A = 0
 
     if u_0 is None:
-        u_0 = np.zeros(problem.d)
+        u_0 = np.zeros(problem.d, dtype=float)
     u_ = np.copy(u_0)
     u_hat = np.zeros(problem.d)
     v = np.zeros(problem.d)

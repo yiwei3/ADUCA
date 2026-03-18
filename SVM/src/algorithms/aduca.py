@@ -87,8 +87,7 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
     A = 0
 
     if u_0 is None:
-        # u_0 = np.full(shape=problem.d, fill_value=-0.0001)
-        u_0 = np.zeros(problem.d)
+        u_0 = np.zeros(problem.d, dtype=float)
     u_ = np.copy(u_0)
     u_hat = np.zeros(problem.d)
     v = np.zeros(problem.d)

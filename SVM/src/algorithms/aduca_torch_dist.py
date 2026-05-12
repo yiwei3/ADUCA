@@ -436,38 +436,15 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
     tilde_y0 = F_y0.clone()
 
     # ----------------------------
-    # Line-search for the first step size a0 (same logic as NumPy reference)
+    # Local backtracking initialization: try a_max, a_max/2, ... until a L_1(a) <= 1.
     # ----------------------------
-    alpha_ls = 2.0
+    a_max = float(parameters.get("a_max", parameters.get("a0", 1.0)))
+    if not math.isfinite(a_max) or a_max <= 0.0:
+        a_max = 1.0
     i_ls = 0
-    a0 = 1.0
-
-    # Initial prox and Lipschitz estimates
-    z_x = x0 - a0 * (normalizer_x * F_x0)
-    tau_x = a0 * normalizer_x
-    x1 = _prox_elastic_net_torch(z_x, tau_x, lambda1, lambda2)
-
-    z_y = y0 - a0 * (normalizer_y * F_y0)
-    y1 = torch.clamp(z_y, min=-1.0, max=0.0)
-
-    F_x1, F_y1 = compute_F_parts_full(x1, y1)
-    tilde_x1 = F_x0
-    tilde_y1 = F_y1
-
-    norm_F_sq = global_weighted_F_norm_sq(F_x1 - F_x0, F_y1 - F_y0)
-    norm_Ftilde_sq = global_weighted_F_norm_sq(F_x1 - tilde_x1, F_y1 - tilde_y1)
-    norm_u_sq = global_weighted_u_norm_sq(x1 - x0, y1 - y0)
-
-    norm_F = torch.sqrt(torch.clamp(norm_F_sq, min=0.0)).item()
-    norm_Ftilde = torch.sqrt(torch.clamp(norm_Ftilde_sq, min=0.0)).item()
-    norm_u = torch.sqrt(torch.clamp(norm_u_sq, min=0.0)).item()
-
-    L_1 = norm_F / norm_u if norm_u != 0 else float("inf")
-    L_hat_1 = norm_Ftilde / norm_u if norm_u != 0 else float("inf")
-    _ = min(C / L_1 if L_1 else float("inf"), C_hat / L_hat_1 if L_hat_1 else float("inf"))
 
     while True:
-        a0 = alpha_ls ** (-i_ls)
+        a0 = a_max * (0.5 ** i_ls)
 
         z_x = x0 - a0 * (normalizer_x * F_x0)
         tau_x = a0 * normalizer_x
@@ -483,10 +460,18 @@ def _aduca_torch_distributed_svm(problem: GMVIProblem,
 
         norm_F = torch.sqrt(torch.clamp(norm_F_sq, min=0.0)).item()
         norm_u = torch.sqrt(torch.clamp(norm_u_sq, min=0.0)).item()
+        L_1 = 0.0 if norm_u <= eps else norm_F / norm_u
 
-        if (2 ** 0.5 * a0 * norm_F <= norm_u):
+        if L_1 == 0.0 or (math.isfinite(L_1) and a0 * L_1 <= 1.0):
             break
         i_ls += 1
+        if a0 <= torch.finfo(vec_dtype).tiny:
+            break
+
+    tilde_x1 = F_x0.clone()
+    tilde_y1 = F_y1.clone()
+    if rank == 0:
+        logging.info("[torch_dist] Local backtracking init: a_max=%s, L1=%s, backtracks=%s, a0=%s", a_max, L_1, i_ls, a0)
 
     x_init, y_init = x1, y1
     F_x_init, F_y_init = F_x1, F_y1
@@ -932,32 +917,14 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
         step = min(step_1, step_2, step_3)
         return step, L_k, L_hat_k
 
-    # line-search for the first step (matching NumPy implementation)
-    alpha = 2
+    # Local backtracking initialization: try a_max, a_max/2, ... until a L_1(a) <= 1.
+    a_max = float(parameters.get("a_max", parameters.get("a0", 1.0)))
+    if not np.isfinite(a_max) or a_max <= 0.0:
+        a_max = 1.0
     i = 0
-    a_0 = 1
-
-    F_store = np.copy(F_0)
-    u_1 = problem.g_func.prox_opr(u_0 - a_0 * normalizers * F_0, a_0 * normalizers[:d], d)
-    for block in blocks:
-        F_tilde_1[block] = F_store[block]
-        F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
-    F_1 = np.copy(F_store)
-    F_diff = F_1 - F_0
-    F_tilde_diff = F_1 - F_tilde_1
-    u_diff = u_1 - u_0
-    norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
-    norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
-    norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
-
-    L_1 = norm_F / norm_u
-    L_hat_1 = norm_F_tilde / norm_u
-
-    a_0 = min(C / L_1, C_hat / L_hat_1)
-
     while True:
         F_store = np.copy(F_0)
-        a_0 = alpha ** (-i)
+        a_0 = a_max * (0.5 ** i)
 
         u_1 = problem.g_func.prox_opr(u_0 - a_0 * normalizers * F_0, a_0 * normalizers[:d], d)
 
@@ -967,14 +934,16 @@ def _aduca_numpy_reference(problem: GMVIProblem, exit_criterion: ExitCriterion, 
 
         F_1 = np.copy(F_store)
         F_diff = F_1 - F_0
-        F_tilde_diff = F_1 - F_tilde_1
         u_diff = u_1 - u_0
         norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
-        norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
         norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
-        if (2 ** 0.5 * a_0 * norm_F <= norm_u):
+        L_1 = 0.0 if norm_u <= eps else norm_F / norm_u
+        if L_1 == 0.0 or (np.isfinite(L_1) and a_0 * L_1 <= 1.0):
             break
         i += 1
+        if a_0 <= np.finfo(float).tiny:
+            break
+    logging.info(f"Local backtracking init: a_max={a_max}, L1={L_1}, backtracks={i}, a0={a_0}")
 
     a_ = a_0
     a = a_0

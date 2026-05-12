@@ -162,7 +162,7 @@ def aduca_torch(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters,
     logresult(results, 0, 0.0, opt_measure)
 
     # ------------------------------------------------------------------
-    # Initialization line search (Algorithm 5.2: Robust Backtracking)
+    # Local backtracking initialization
     # ------------------------------------------------------------------
     @torch.no_grad()
     def compute_F1_and_Ftilde1(x0_: torch.Tensor, x1_: torch.Tensor):
@@ -198,31 +198,19 @@ def aduca_torch(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters,
     def weighted_L_from_points(xa: torch.Tensor, xb: torch.Tensor, Fa: torch.Tensor, Fb: torch.Tensor) -> float:
         dx = xb - xa
         denom = float(inner_weighted_sq(dx, normalizers_recip).item())
-        denom = max(denom, 1e-24)
+        if denom <= 1e-24:
+            return 0.0
         dF = Fb - Fa
         num = float(inner_weighted_sq(dF, normalizers).item())
         return math.sqrt(max(num, 0.0) / denom)
 
     with torch.no_grad():
-        a_try = 1.0
-        x1_try_forward = x0 - a_try * normalizers * F0
-        x1_try = g.prox_opr_torch(x1_try_forward, tau=a_try, weights=normalizers_recip if use_weighted_prox else None)
-        F1_try, Ftilde_try, _, _, _ = compute_F1_and_Ftilde1(x0, x1_try)
-
-        L_pr = weighted_L_from_points(x0, x1_try, F0, F1_try)
-        Lhat_pr = weighted_L_from_points(x0, x1_try, Ftilde_try, F1_try)
-
-        candidates = []
-        if L_pr > 0.0:
-            candidates.append(C / L_pr)
-        if Lhat_pr > 0.0:
-            candidates.append(C_hat / Lhat_pr)
-        a_start = min(candidates) if candidates else 1.0
-
-        alpha_bt = 2.0
+        a_max = float(parameters.get("a_max", parameters.get("a0", 1.0)))
+        if not math.isfinite(a_max) or a_max <= 0.0:
+            a_max = 1.0
         i_bt = 0
         while True:
-            a0 = a_start / (alpha_bt ** i_bt)
+            a0 = a_max * (0.5 ** i_bt)
             x1_bt_forward = x0 - a0 * normalizers * F0
             x1_bt = g.prox_opr_torch(x1_bt_forward, tau=a0, weights=normalizers_recip if use_weighted_prox else None)
 
@@ -230,19 +218,19 @@ def aduca_torch(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters,
             F1_bt = oracle.func_map_with_state(x1_bt, Au_bt, ATv_bt, r2_bt)
             L1_bt = weighted_L_from_points(x0, x1_bt, F0, F1_bt)
 
-            if (L1_bt == 0.0) or (a0 <= 1.0 / (math.sqrt(2.0) * L1_bt)):
+            if L1_bt == 0.0 or a0 * L1_bt <= 1.0:
                 break
             i_bt += 1
+            if a0 <= 1e-300:
+                break
 
-        x1_forward = x0 - a0 * normalizers * F0
-        x1 = g.prox_opr_torch(x1_forward, tau=a0, weights=normalizers_recip if use_weighted_prox else None)
+        x1 = x1_bt
         F1, F_tilde1, Au1, ATv1, r2_1 = compute_F1_and_Ftilde1(x0, x1)
 
         logging.info(
-            "Algo5.2 init: L_pr=%.4e, Lhat_pr=%.4e, a_start=%.4e, backtracks=%d, a0=%.4e",
-            L_pr,
-            Lhat_pr,
-            a_start,
+            "Local backtracking init: a_max=%.4e, L1=%.4e, backtracks=%d, a0=%.4e",
+            a_max,
+            L1_bt,
             i_bt,
             a0,
         )

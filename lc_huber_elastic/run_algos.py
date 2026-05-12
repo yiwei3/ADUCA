@@ -164,6 +164,7 @@ def parse_commandline() -> argparse.Namespace:
     parser.add_argument("--beta", type=float, default=None)
     parser.add_argument("--gamma", type=float, default=None)
     parser.add_argument("--rho", type=float, default=None)
+    parser.add_argument("--a_max", type=float, default=1.0, help="ADUCA local backtracking initialization a_max")
 
     # Lipschitz settings for CODER/PCCM
     parser.add_argument("--lipschitz", type=float, default=None)
@@ -393,6 +394,7 @@ def main() -> None:
             "beta": float(args.beta),
             "gamma": float(args.gamma),
             "rho": float(args.rho),
+            "a_max": float(args.a_max),
             "block_size_u": bs_u,
             "block_size_v": bs_v,
             "device": str(args.device),

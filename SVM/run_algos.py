@@ -105,6 +105,7 @@ def parse_commandline():
     parser.add_argument('--beta', type = float, help='aduca constant parameter')
     parser.add_argument('--gamma', type = float, help='aduca constant parameter')
     parser.add_argument('--rho', type = float, default=0.0, help='aduca constant parameter')
+    parser.add_argument('--a_max', type=float, default=1.0, help='ADUCA local backtracking initialization a_max')
     parser.add_argument('--block_size', type = int, default=1, help='block_size parameter >= 1, <= n')
     parser.add_argument('--block_size_2', type = int, default=float('inf'), help='block_size parameter >= 1, <= n')
     parser.add_argument('--device', default=None, help='Torch device (e.g. cuda:0)')
@@ -296,6 +297,7 @@ def main():
             "gamma": args.gamma,
             "rho": args.rho,
             "mu": args.mu,
+            "a_max": args.a_max,
             "block_size": block_size,
             "block_size_2": block_size_2,
         }

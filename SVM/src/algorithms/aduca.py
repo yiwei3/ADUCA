@@ -145,31 +145,14 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
     ###
 
 
-    # line-search for the first step
-    alpha = 2
+    # Local backtracking initialization: try a_max, a_max/2, ... until a L_1(a) <= 1.
+    a_max = float(parameters.get("a_max", parameters.get("a0", 1.0)))
+    if not np.isfinite(a_max) or a_max <= 0.0:
+        a_max = 1.0
     i = 0
-    a_0 = 1
-
-    u_1 = problem.g_func.prox_opr(u_0 - a_0 * normalizers * F_0, a_0 * normalizers[:d], d)
-    for block in blocks:
-        F_tilde_1[block] = F_store[block]
-        F_store = problem.operator_func.func_map_block_update(F_store, u_1[block], u_0[block], block)
-    F_1 = np.copy(F_store)
-    F_diff = F_1 - F_0
-    F_tilde_diff = F_1 - F_tilde_1
-    u_diff = u_1 - u_0
-    norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
-    norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
-    norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
-
-    L_1 = norm_F / norm_u
-    L_hat_1 = norm_F_tilde / norm_u
-
-    a_0 = min(C/L_1, C_hat/L_hat_1)
-
     while True:
         F_store = np.copy(F_0)
-        a_0 = alpha**(-i)
+        a_0 = a_max * (0.5 ** i)
 
         u_1 = problem.g_func.prox_opr(u_0 - a_0 * normalizers * F_0, a_0 * normalizers[:d], d)
 
@@ -179,14 +162,16 @@ def aduca(problem: GMVIProblem, exit_criterion: ExitCriterion, parameters, u_0=N
         
         F_1 = np.copy(F_store)
         F_diff = F_1 - F_0
-        F_tilde_diff = F_1 - F_tilde_1
         u_diff = u_1 - u_0
         norm_F = np.sqrt(np.inner(F_diff, normalizers * F_diff))
-        norm_F_tilde = np.sqrt(np.inner(F_tilde_diff, normalizers * F_tilde_diff))
         norm_u = np.sqrt(np.inner(u_diff, normalizers_recip * u_diff))
-        if (2**0.5 * a_0 * norm_F <= norm_u):
+        L_1 = 0.0 if norm_u <= 1e-15 else norm_F / norm_u
+        if L_1 == 0.0 or (np.isfinite(L_1) and a_0 * L_1 <= 1.0):
             break
         i += 1
+        if a_0 <= np.finfo(float).tiny:
+            break
+    logging.info(f"Local backtracking init: a_max={a_max}, L1={L_1}, backtracks={i}, a0={a_0}")
     # line-search end
 
     a_ = a_0
